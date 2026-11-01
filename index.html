@@ -1012,6 +1012,10 @@ async function saveCore(){
   await Promise.all(urls.map(u=>fetch(u).catch(()=>null)));
   return tj.tiles[0].match(/\/planet\/([^/]+)\//)[1];
 }
+async function swControlling(){
+  await navigator.serviceWorker.ready;
+  if(!navigator.serviceWorker.controller) await new Promise(ok=>{ navigator.serviceWorker.addEventListener("controllerchange",ok,{once:true}); setTimeout(ok,3000); });
+}
 async function runRegion(r,refresh){
   const keys=tileKeys(r.b,r.z).all, ctl=dlAbort=new AbortController();
   const cache=await caches.open(TILE_CACHE);
@@ -1020,8 +1024,7 @@ async function runRegion(r,refresh){
   setStatus("#dlStatus","준비 중…");
   let done=0, failed=0, bytes=0, next=0;
   try{
-    await navigator.serviceWorker.ready;
-    if(!navigator.serviceWorker.controller) await new Promise(ok=>{ navigator.serviceWorker.addEventListener("controllerchange",ok,{once:true}); setTimeout(ok,3000); });
+    await swControlling();
     const ver=await saveCore();
     const worker=async()=>{
       while(next<keys.length && !ctl.signal.aborted){
@@ -1088,7 +1091,12 @@ let installEvt=null;
 addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEvt=e; $("#btnInstall").hidden=false; });
 addEventListener("appinstalled",()=>{ installEvt=null; $("#btnInstall").hidden=true; });
 $("#btnInstall").onclick=async()=>{ if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt=null; $("#btnInstall").hidden=true; };
-if("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(e=>console.warn("서비스 워커 등록 실패",e));
+if("serviceWorker" in navigator && location.protocol!=="file:"){
+  navigator.serviceWorker.register("sw.js").catch(e=>console.warn("서비스 워커 등록 실패",e));
+  /* 첫 방문의 지도 스타일은 서비스 워커가 켜지기 전에 받으므로, 끊겨도 열리도록 한 번 저장 */
+  if(!lsGet("gridsite.coreSaved") && !isOffline())
+    swControlling().then(saveCore).then(()=>lsSet("gridsite.coreSaved","1")).catch(()=>{});
+}
 function netUI(){ $("#netChip").hidden=!isOffline(); }
 addEventListener("offline",netUI);
 addEventListener("online",()=>{ netUI(); loadGrid(); });
