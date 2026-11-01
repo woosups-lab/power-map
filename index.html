@@ -76,6 +76,25 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
 .region{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
 .region:last-child{border-bottom:0}
 .region .acts{display:flex;gap:4px}
+body[data-role="viewer"] .admin-only{display:none!important}
+#gate{position:fixed;inset:0;z-index:3000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+#gate form{width:100%;max-width:340px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:12px}
+#gate h1{font-size:18px;margin:0}
+input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font-size:14px}
+.rec{display:flex;flex-direction:column;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.rec:last-child{border-bottom:0}
+.rec .top{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.rec .top input[type=date]{width:auto;padding:3px 6px;font-size:12px}
+.rec textarea{min-height:44px}
+.rec .text{white-space:pre-wrap;overflow-wrap:anywhere}
+.rec.att{display:grid;grid-template-columns:48px 1fr;gap:10px;align-items:center}
+.thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);overflow:hidden}
+.acts{display:flex;gap:4px;flex-wrap:wrap}
+.pop-stage{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px}
+.pop-stage select{padding:3px 6px;font-size:12px;width:auto;flex:1}
+#photoView{position:fixed;inset:0;z-index:2500;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px}
+#photoView img{max-width:100%;max-height:100%;object-fit:contain}
+#photoView button{position:absolute;top:12px;right:12px}
 .route{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer}
 .route:last-child{border-bottom:0}
 .route .sw{width:14px;height:6px;border-radius:3px}
@@ -100,17 +119,29 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
 @media (prefers-reduced-motion: reduce){ #panel{transition:none} }
 </style>
 </head>
-<body>
+<body data-role="viewer">
+<div id="gate">
+  <form id="gateForm">
+    <h1>현장 전력지도</h1>
+    <p class="hint" id="gateMsg">비밀번호를 입력하세요.</p>
+    <input type="password" id="gatePw" autocomplete="current-password" aria-label="비밀번호">
+    <button class="btn primary" type="submit">들어가기</button>
+    <button class="btn" type="button" id="gateCancel" hidden>취소</button>
+    <p class="status" id="gateStatus"></p>
+  </form>
+</div>
+<div id="photoView" hidden><img id="photoImg" alt=""><button class="btn" id="photoClose">닫기</button></div>
 <aside id="panel">
   <header class="top" id="panelHead">
     <h1>현장 전력지도</h1>
     <span class="chip off" id="netChip" hidden>오프라인</span>
     <span class="chip" id="countChip">0개 현장</span>
+    <button class="btn small" id="btnAdmin">관리자 모드</button>
     <button class="btn small" id="mobileToggle" aria-label="패널 접기/펴기">▾</button>
   </header>
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="sites" aria-selected="true">현장</button>
-    <button role="tab" data-tab="add" aria-selected="false">추가·가져오기</button>
+    <button role="tab" data-tab="add" aria-selected="false" class="admin-only">추가·가져오기</button>
     <button role="tab" data-tab="route" aria-selected="false">경로</button>
     <button role="tab" data-tab="offline" aria-selected="false">오프라인</button>
     <button role="tab" data-tab="settings" aria-selected="false">설정</button>
@@ -149,8 +180,35 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
     <p class="hint">송전선로·변전소·발전소는 OpenInfraMap과 같은 OpenStreetMap 데이터입니다. 매주 자동으로 갱신되며, 이 기기에 저장해 두고 새 날짜의 데이터가 나왔을 때만 다시 받습니다.</p>
   </section>
 
+  <!-- 현장 상세 -->
+  <section class="view" data-view="detail" hidden>
+    <button class="btn small" id="btnBack" style="align-self:flex-start">← 현장 목록</button>
+    <h2 id="dName" style="font-size:16px;color:var(--fg);letter-spacing:0;margin:0"></h2>
+    <p class="hint" id="dInfo"></p>
+    <div class="row">
+      <label class="f">구분<select id="dCat"></select></label>
+      <label class="f">진행 단계<select id="dStatus"></select></label>
+    </div>
+    <button class="btn small admin-only" id="btnDetailEdit" style="align-self:flex-start">이름·주소·위치 수정</button>
+    <p class="status" id="dMemo" style="white-space:pre-wrap"></p>
+    <h2>기록</h2>
+    <div class="card admin-only">
+      <label class="f">날짜<input type="date" id="dLogDate"></label>
+      <label class="f">내용<textarea id="dLogText" placeholder="협의 내용, 진행 상황 등"></textarea></label>
+      <button class="btn primary" id="btnLogAdd">기록 추가</button>
+    </div>
+    <div class="list" id="dLogs"></div>
+    <h2>첨부 파일·사진</h2>
+    <div class="card admin-only">
+      <label class="f">첨부 날짜<input type="date" id="dFileDate"></label>
+      <label class="f">파일 선택 (여러 개 가능)<input type="file" id="dFileIn" multiple></label>
+      <p class="status" id="dFileStatus"></p>
+    </div>
+    <div class="list" id="dFiles"></div>
+  </section>
+
   <!-- 추가/가져오기 -->
-  <section class="view" data-view="add" hidden>
+  <section class="view admin-only" data-view="add" hidden>
     <h2>현장 정보</h2>
     <input type="hidden" id="eId">
     <label class="f">현장명<input type="text" id="eName" placeholder="예: 충주 ○○ 태양광+ESS"></label>
@@ -179,17 +237,18 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
     <p class="status" id="editStatus"></p>
 
     <h2>파일로 한꺼번에 가져오기</h2>
-    <p class="hint">구글어스 KML·KMZ, 엑셀에서 저장한 CSV(현장명·주소 또는 위도·경도 열), 이 프로그램에서 내보낸 JSON을 받습니다.</p>
-    <input type="file" id="fileIn" accept=".kml,.kmz,.csv,.json,.txt">
+    <p class="hint">구글어스 KML·KMZ, 엑셀에서 저장한 CSV(현장명·주소 또는 위도·경도 열), 이 프로그램에서 내보낸 JSON·전체 백업(ZIP)을 받습니다.</p>
+    <input type="file" id="fileIn" accept=".kml,.kmz,.csv,.json,.txt,.zip">
     <p class="status" id="importStatus"></p>
 
     <h2>내보내기</h2>
+    <button class="btn primary" id="expZip">전체 백업 (기록·첨부 포함 ZIP)</button>
     <div class="row">
       <button class="btn" id="expJson">JSON</button>
       <button class="btn" id="expCsv">CSV(엑셀)</button>
       <button class="btn" id="expKml">KML(구글어스)</button>
     </div>
-    <p class="hint">현장 정보는 이 기기에만 저장되고 어디로도 전송되지 않습니다. 다른 기기와 맞추려면 JSON으로 내보낸 파일을 그 기기에서 가져오세요. 공개 저장소이므로 내보낸 파일을 저장소에 올리지 마세요.</p>
+    <p class="hint">현장 정보는 이 기기에만 저장되고 어디로도 전송되지 않습니다. 이용자나 다른 기기에는 전체 백업 ZIP을 전달하세요. ZIP은 암호화되지 않으니 회사 내부 경로로만 전달하고, 공개 저장소에는 올리지 마세요. JSON·CSV·KML에는 첨부 파일이 들어가지 않습니다.</p>
   </section>
 
   <!-- 경로 -->
@@ -240,6 +299,23 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
 
   <!-- 설정 -->
   <section class="view" data-view="settings" hidden>
+    <h2>사용자</h2>
+    <p class="status" id="roleNote"></p>
+    <button class="btn" id="btnLogout">로그아웃</button>
+    <h2>현장 데이터 받기</h2>
+    <p class="hint">관리자에게 받은 전체 백업 ZIP을 불러옵니다.<span id="restoreNote"></span></p>
+    <input type="file" id="restoreIn" accept=".zip">
+    <p class="status" id="restoreStatus"></p>
+    <div class="admin-only" style="display:flex;flex-direction:column;gap:12px">
+      <h2>비밀번호 관리</h2>
+      <label class="f">새 이용자 비밀번호 (바꿀 때만 입력)<input type="password" id="pwViewer" autocomplete="new-password"></label>
+      <label class="f">새 관리자 비밀번호 (바꿀 때만 입력)<input type="password" id="pwAdmin" autocomplete="new-password"></label>
+      <button class="btn primary" id="btnPwApply">비밀번호 변경 적용</button>
+      <p class="status" id="pwStatus"></p>
+      <label class="f">GitHub 토큰 (이 기기에만 저장)<input type="password" id="ghToken" autocomplete="off" placeholder="github_pat_…"></label>
+      <button class="btn" id="btnTokenSave">토큰 저장</button>
+      <p class="hint">토큰이 있으면 변경이 바로 사이트에 반영됩니다(약 1분). <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 만들기</a>: power-map 저장소만 선택하고 Contents 권한을 Read and write로 주세요. 토큰이 없으면 access.json 파일을 내려받아 저장소에 직접 올립니다.</p>
+    </div>
     <h2>앱으로 설치</h2>
     <button class="btn" id="btnInstall" hidden>이 기기에 설치</button>
     <p class="hint" id="installHint">윈도우·맥(크롬·엣지)은 주소창 오른쪽의 설치 아이콘, 안드로이드는 메뉴의 ‘홈 화면에 추가’, 아이폰·맥 사파리는 공유 버튼의 ‘홈 화면에 추가’(맥은 ‘Dock에 추가’)로 설치합니다.</p>
@@ -254,7 +330,7 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
     <p class="hint">현장 정보는 지금 쓰는 브라우저(또는 설치한 앱) 안에 저장됩니다. 브라우저와 설치한 앱의 저장 공간이 다른 기기도 있으니, 기기를 바꾸거나 앱을 지우기 전에 JSON으로 내보내 두세요.</p>
     <button class="btn" id="btnRegrid">전력설비 다시 받기</button>
     <p class="hint">전력설비 데이터는 매주 자동으로 갱신됩니다. 시작할 때 새 날짜가 있으면 알아서 받으므로 평소에는 누를 필요가 없습니다.</p>
-    <button class="btn" id="btnWipe">이 기기의 현장 모두 지우기</button>
+    <button class="btn admin-only" id="btnWipe">이 기기의 현장 모두 지우기</button>
     <p class="status" id="wipeStatus"></p>
   </section>
 </aside>
@@ -271,8 +347,15 @@ if(window.maplibregl) maplibregl.setWorkerUrl("vendor/maplibre-gl-csp-worker.js"
 <script>
 "use strict";
 /* ---------- 기본 상수 ---------- */
-const CATS = {"태양광":"#e8a400","ESS":"#0b6bcb","태양광+ESS":"#2f9e44","풍력":"#12a4b6","데이터센터":"#6741d9","수전·변전":"#c2255c","기타":"#5d6b7a"};
-const STATUSES = ["영업","설계","시공","준공·운영","보류"];
+const CATS = {"사무소":"#5d6b7a","태양광":"#e8a400","ESS":"#0b6bcb","태양광+ESS":"#2f9e44","데이터센터":"#6741d9","사설변전소":"#c2255c"};
+const UNCAT = "미분류";   // 예전 구분 중 새 구분에 대응이 없는 값 (풍력, 기타)
+const catColor = c => CATS[c] || "#8a96a3";
+const STATUSES = ["사업참여 검토 중","사업개발 중","EPC 영업 중","EPC 공사 중","운영 중"];
+const OLD_CAT = {"수전·변전":"사설변전소"};
+const OLD_STATUS = {"영업":"EPC 영업 중","설계":"사업개발 중","시공":"EPC 공사 중","준공·운영":"운영 중","보류":"사업참여 검토 중"};
+const normCat = c => CATS[c] ? c : (OLD_CAT[c] || UNCAT);
+const normStatus = s => STATUSES.includes(s) ? s : (OLD_STATUS[s] || STATUSES[0]);
+const normSite = s => ({...s, category:normCat(s.category), status:normStatus(s.status), logs:s.logs||[], files:s.files||[]});
 const ROUTE_COLORS = ["#0b6bcb","#e8590c","#2f9e44"];
 const STORE = "gridsite.sites.v1";
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
@@ -294,6 +377,8 @@ const mins = s => { const m=Math.round(s/60); return m<60? m+"분" : Math.floor(
 
 /* ---------- 상태 ---------- */
 let sites = [];
+let role = "viewer";
+const isAdmin = () => role==="admin";
 const substations = new Map();   // id -> {id,name,lat,lng,voltage,operator}
 let picking = false;
 
@@ -385,18 +470,20 @@ const minorLayer = L.layerGroup();
 const markers = new Map();
 
 function siteIcon(s){
-  const c = CATS[s.category] || CATS["기타"];
+  const c = catColor(s.category);
   return L.divIcon({className:"", html:`<div class="site-pin" style="background:${c}"></div>`, iconSize:[18,18], iconAnchor:[9,18], popupAnchor:[0,-16]});
 }
 function sitePopup(s){
-  return `<b>${esc(s.name)}</b><br><span style="color:#5d6b7a">${esc(s.category)} · ${esc(s.status)}${s.capacity? " · "+esc(s.capacity):""}</span>
+  const stage=STATUSES.map(v=>`<option${v===s.status?" selected":""}>${esc(v)}</option>`).join("");
+  return `<b>${esc(s.name)}</b><br><span style="color:#5d6b7a">${esc(s.category)}${s.capacity? " · "+esc(s.capacity):""}</span>
+   <label class="pop-stage">진행 단계<select onchange="App.setStage('${s.id}',this.value)"${isAdmin()?"":" disabled"}>${stage}</select></label>
    ${s.address? `<br>${esc(s.address)}`:""}${s.memo? `<br><i>${esc(s.memo)}</i>`:""}
    <br><span style="font-family:monospace;font-size:11px">${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</span>
    <div class="pop-actions">
     <button onclick="App.setEnd('from','site:${s.id}')">출발로</button>
     <button onclick="App.setEnd('to','site:${s.id}')">도착으로</button>
     <button onclick="App.near('${s.id}')">주변 변전소</button>
-    <button onclick="App.edit('${s.id}')">수정</button>
+    <button onclick="App.detail('${s.id}')">상세·기록·첨부</button>
    </div>`;
 }
 function renderMarkers(){
@@ -412,10 +499,12 @@ function renderMarkers(){
 function fillSelect(sel, items, first){
   sel.innerHTML = (first? `<option value="">${first}</option>`:"") + items.map(v=>`<option>${esc(v)}</option>`).join("");
 }
-fillSelect($("#fCat"), Object.keys(CATS), "전체 구분");
+fillSelect($("#fCat"), Object.keys(CATS), "전부");
 fillSelect($("#fStatus"), STATUSES, "전체 단계");
 fillSelect($("#eCat"), Object.keys(CATS));
 fillSelect($("#eStatus"), STATUSES);
+fillSelect($("#dCat"), Object.keys(CATS));
+fillSelect($("#dStatus"), STATUSES);
 
 function renderList(){
   const q = $("#q").value.trim().toLowerCase(), fc=$("#fCat").value, fs=$("#fStatus").value;
@@ -424,7 +513,7 @@ function renderList(){
      .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
   $("#siteList").innerHTML = rows.length ? rows.map(s=>`
     <div class="item" data-id="${s.id}" tabindex="0">
-      <span class="dot" style="background:${CATS[s.category]||CATS["기타"]}"></span>
+      <span class="dot" style="background:${catColor(s.category)}"></span>
       <div style="min-width:0"><div class="nm">${esc(s.name)}</div><div class="sub">${esc(s.address||s.memo||"")}</div></div>
       <div class="meta">${esc(s.status)}${s.example?'<br><span class="chip">예시</span>':""}</div>
     </div>`).join("") : `<div class="item" style="cursor:default;grid-template-columns:1fr"><span class="sub">${sites.length? "조건에 맞는 현장이 없습니다." : "아직 현장이 없습니다. ‘추가·가져오기’ 탭에서 등록하세요."}</span></div>`;
@@ -446,7 +535,7 @@ function refreshAll(){ save(); renderMarkers(); renderList(); }
 /* ---------- 편집 ---------- */
 function clearForm(){
   ["#eId","#eName","#eCap","#eAddr","#eLink","#eLat","#eLng","#eMemo"].forEach(s=>$(s).value="");
-  $("#eCat").value="태양광"; $("#eStatus").value="영업"; $("#btnDelete").hidden=true; setStatus("#editStatus","");
+  $("#eCat").value="태양광"; $("#eStatus").value=STATUSES[0]; $("#btnDelete").hidden=true; setStatus("#editStatus","");
 }
 function edit(id){
   const s = sites.find(x=>x.id===id); if(!s) return;
@@ -457,21 +546,25 @@ function edit(id){
 }
 $("#btnClear").onclick = clearForm;
 $("#btnSave").onclick = () => {
+  if(!isAdmin()) return;
   const lat=parseFloat($("#eLat").value), lng=parseFloat($("#eLng").value), name=$("#eName").value.trim();
+  if(!$("#eCat").value) return setStatus("#editStatus","구분을 고르세요.",true);
   if(!name) return setStatus("#editStatus","현장명을 입력하세요.",true);
   if(!isFinite(lat)||!isFinite(lng)) return setStatus("#editStatus","위치가 없습니다. 주소로 찾거나 지도에서 찍거나 좌표를 넣으세요.",true);
   const id = $("#eId").value || uid();
   const rec = {id,name,category:$("#eCat").value,status:$("#eStatus").value,capacity:$("#eCap").value.trim(),
     address:$("#eAddr").value.trim(),lat,lng,memo:$("#eMemo").value.trim(),source:"직접 입력"};
   const i = sites.findIndex(x=>x.id===id);
-  if(i>=0) sites[i]={...sites[i],...rec, example:false}; else sites.push(rec);
+  if(i>=0) sites[i]={...sites[i],...rec, example:false}; else sites.push({...rec,logs:[],files:[]});
   refreshAll(); clearForm(); setStatus("#editStatus","저장했습니다: "+name);
   map.setView([lat,lng],13); markers.get(id)?.openPopup();
 };
 let delArmed=false;
 $("#btnDelete").onclick = () => {
   if(!delArmed){ delArmed=true; $("#btnDelete").textContent="한 번 더 누르면 삭제"; setTimeout(()=>{delArmed=false;$("#btnDelete").textContent="삭제";},3000); return; }
-  sites = sites.filter(x=>x.id!==$("#eId").value); delArmed=false; $("#btnDelete").textContent="삭제";
+  const gone=sites.find(x=>x.id===$("#eId").value);
+  (gone?.files||[]).forEach(f=>IDB.delFile(f.id));
+  sites = sites.filter(x=>x!==gone); delArmed=false; $("#btnDelete").textContent="삭제";
   refreshAll(); clearForm(); setStatus("#editStatus","삭제했습니다.");
 };
 $("#btnPick").onclick = () => {
@@ -566,6 +659,7 @@ $("#fileIn").addEventListener("change", async e=>{
   setStatus("#importStatus","읽는 중…");
   try{
     const ext=f.name.split(".").pop().toLowerCase(); let recs=[];
+    if(ext==="zip"){ const n=await restoreBackup(f,false); setStatus("#importStatus",`${n}개 현장을 백업에서 불러왔습니다.`); e.target.value=""; return; }
     if(ext==="kmz"){ const z=await JSZip.loadAsync(f); const k=Object.keys(z.files).find(n=>n.toLowerCase().endsWith(".kml"));
       recs=parseKML(await z.file(k).async("string")); }
     else if(ext==="kml") recs=parseKML(await f.text());
@@ -627,8 +721,8 @@ async function mergeRecords(recs, src){
     if(!isFinite(lat)||!isFinite(lng)){ failed.push(r.name); continue; }
     const dup = sites.find(s=>s.name===r.name && Math.abs(s.lat-lat)<1e-4 && Math.abs(s.lng-lng)<1e-4);
     if(dup) continue;
-    sites.push({id:/^[\w-]+$/.test(r.id||"")?r.id:uid(),name:r.name,category:CATS[r.category]?r.category:"기타",status:STATUSES.includes(r.status)?r.status:"영업",
-      capacity:r.capacity||"",address:r.address||"",lat,lng,memo:r.memo||"",source:r.source||src}); added++;
+    sites.push({id:/^[\w-]+$/.test(r.id||"")?r.id:uid(),name:r.name,category:normCat(r.category),status:normStatus(r.status),
+      capacity:r.capacity||"",address:r.address||"",lat,lng,memo:r.memo||"",source:r.source||src,logs:r.logs||[],files:[]}); added++;
   }
   refreshAll();
   if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.1));
@@ -642,6 +736,35 @@ function download(name, text, type){
   a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
 }
 const stamp = () => new Date().toISOString().slice(0,10);
+/* 전체 백업: sites.json + files/첨부ID. 이용자 전달과 기기 이전에 사용 */
+$("#expZip").onclick=async()=>{
+  const z=new JSZip(), list=sites.filter(s=>!s.example);
+  z.file("sites.json",JSON.stringify(list,null,2));
+  for(const s of list) for(const f of s.files){ const b=await IDB.getFile(f.id); if(b) z.file("files/"+f.id,b); }
+  download(`현장백업_${stamp()}.zip`,await z.generateAsync({type:"blob"}),"application/zip");
+};
+async function restoreBackup(f,replace){
+  const z=await JSZip.loadAsync(f), entry=z.file("sites.json");
+  if(!entry) throw new Error("전체 백업 파일이 아닙니다");
+  const safe=x=>/^[\w-]+$/.test(x.id||"");
+  const incoming=JSON.parse(await entry.async("string")).filter(safe).map(normSite);
+  if(replace){ await IDB.clearFiles(); sites=[]; }
+  for(const s of incoming){
+    s.files=s.files.filter(safe);
+    for(const m of s.files){ const b=z.file("files/"+m.id); if(b) await IDB.putFile(m.id,new Blob([await b.async("arraybuffer")],{type:m.type})); }
+    const i=sites.findIndex(x=>x.id===s.id); if(i>=0) sites[i]=s; else sites.push(s);
+  }
+  refreshAll();
+  if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.1));
+  return incoming.length;
+}
+$("#restoreIn").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  setStatus("#restoreStatus","불러오는 중…");
+  try{ const n=await restoreBackup(f,!isAdmin()); setStatus("#restoreStatus",`${n}개 현장을 불러왔습니다.`); }
+  catch(err){ setStatus("#restoreStatus","불러오지 못했습니다: "+err.message,true); }
+  e.target.value="";
+});
 $("#expJson").onclick=()=>download("sites.json", JSON.stringify(sites.filter(s=>!s.example),null,2),"application/json");
 $("#expCsv").onclick=()=>{
   const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
@@ -737,10 +860,15 @@ function compact(els){
 
 /* 전력설비는 IndexedDB에 저장: grid.json 전체(grid:full) 또는 Overpass로 받은 칸(kr:위도,경도) */
 const IDB={db:null, mem:new Map(),
-  open(){ return new Promise(res=>{ try{ const r=indexedDB.open("gridsite",1);
-      r.onupgradeneeded=()=>r.result.createObjectStore("cells");
+  open(){ return new Promise(res=>{ try{ const r=indexedDB.open("gridsite",2);
+      r.onupgradeneeded=()=>{ for(const n of ["cells","files"]) if(!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n); };
       r.onsuccess=()=>{ this.db=r.result; res(); }; r.onerror=()=>res(); }catch(e){ res(); } }); },
   get(k){ if(!this.db) return Promise.resolve(this.mem.get(k)); return new Promise(res=>{ try{ const q=this.db.transaction("cells").objectStore("cells").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>res(null);}catch(e){res(null);} }); },
+  fileReq(mode,fn){ return new Promise((res,rej)=>{ if(!this.db) return rej(new Error("이 브라우저 저장소를 쓸 수 없습니다")); const t=this.db.transaction("files",mode), q=fn(t.objectStore("files")); t.oncomplete=()=>res(q.result); t.onerror=t.onabort=()=>rej(t.error||new Error("저장 공간이 부족합니다")); }); },
+  putFile(id,blob){ return this.fileReq("readwrite",s=>s.put(blob,id)); },
+  getFile(id){ return this.fileReq("readonly",s=>s.get(id)); },
+  delFile(id){ return this.fileReq("readwrite",s=>s.delete(id)).catch(()=>{}); },
+  clearFiles(){ return this.fileReq("readwrite",s=>s.clear()).catch(()=>{}); },
   set(k,v){ this.mem.set(k,v); if(!this.db) return; try{ this.db.transaction("cells","readwrite").objectStore("cells").put(v,k);}catch(e){} },
   clear(){ this.mem.clear(); if(!this.db) return Promise.resolve(); return new Promise(res=>{ try{ const t=this.db.transaction("cells","readwrite"); t.objectStore("cells").clear(); t.oncomplete=res; t.onerror=res; }catch(e){res();} }); }
 };
@@ -935,6 +1063,207 @@ $("#nearList").addEventListener("click",e=>{
   const it=e.target.closest("[data-ss]"); if(it){ const s=substations.get(it.dataset.ss); map.setView([s.lat,s.lng],14); }
 });
 
+/* ---------- 현장 상세: 진행 단계, 기록, 첨부 ---------- */
+const today = () => { const d=new Date(); return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
+const fileSize = n => n<1e6 ? Math.ceil(n/1e3)+" KB" : (n/1e6).toFixed(1)+" MB";
+let curDetail=null, thumbUrls=[];
+const curSite = () => sites.find(x=>x.id===curDetail);
+function setStage(id,val,keepPopup=true){
+  const s=sites.find(x=>x.id===id); if(!s || !isAdmin() || s.status===val) return;
+  s.logs.push({id:uid(),date:today(),text:`진행 단계 변경: ${s.status} → ${val}`});
+  s.status=val; refreshAll();
+  if(curDetail===id) renderDetail();
+  if(keepPopup) markers.get(id)?.openPopup();
+}
+function detail(id){ curDetail=id; map.closePopup(); showTab("detail"); renderDetail(); }
+function renderDetail(){
+  const s=curSite(); if(!s) return showTab("sites");
+  const ro=!isAdmin();
+  $("#dName").textContent=s.name;
+  $("#dInfo").textContent=[s.capacity,s.address].filter(Boolean).join(" · ");
+  $("#dMemo").textContent=s.memo||"";
+  const cat=$("#dCat"); cat.value=s.category; if(!cat.value) cat.selectedIndex=-1;
+  $("#dStatus").value=s.status; cat.disabled=ro; $("#dStatus").disabled=ro;
+  $("#dLogDate").value=$("#dFileDate").value=today();
+  const logs=s.logs.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $("#dLogs").innerHTML=logs.length?logs.map(l=>ro?`
+    <div class="rec"><div class="hint num">${esc(l.date)}</div><div class="text">${esc(l.text)}</div></div>`:`
+    <div class="rec" data-id="${esc(l.id)}"><div class="top"><input type="date" data-f="date" value="${esc(l.date)}" aria-label="기록 날짜"><button class="btn small" data-act="del">삭제</button></div>
+      <textarea data-f="text" aria-label="기록 내용">${esc(l.text)}</textarea></div>`).join("")
+    :`<div class="rec"><span class="hint">아직 기록이 없습니다.</span></div>`;
+  thumbUrls.forEach(u=>URL.revokeObjectURL(u)); thumbUrls=[];
+  const files=s.files.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  $("#dFiles").innerHTML=files.length?files.map(f=>`
+    <div class="rec att" data-id="${esc(f.id)}"><div class="thumb" data-thumb="${esc(f.id)}">${esc((f.name.split(".").pop()||"").slice(0,5).toUpperCase())}</div>
+      <div style="min-width:0"><div class="nm" style="font-weight:600;overflow-wrap:anywhere">${esc(f.name)}</div>
+        <div class="top" style="margin:2px 0 4px">${ro?`<span class="hint num">${esc(f.date)}</span>`:`<input type="date" data-f="date" value="${esc(f.date)}" aria-label="첨부 날짜">`}<span class="hint">${fileSize(f.size)}</span></div>
+        <div class="acts"><button class="btn small" data-act="open">보기</button><button class="btn small" data-act="save">내려받기</button>${ro?"":'<button class="btn small" data-act="del">삭제</button>'}</div></div></div>`).join("")
+    :`<div class="rec"><span class="hint">아직 첨부가 없습니다.</span></div>`;
+  for(const f of files) if(f.type.startsWith("image/") && f.type!=="image/svg+xml") IDB.getFile(f.id).then(b=>{
+    const box=document.querySelector(`[data-thumb="${CSS.escape(f.id)}"]`); if(!b||!box) return;
+    const u=URL.createObjectURL(b); thumbUrls.push(u);
+    box.innerHTML=""; const img=new Image(); img.src=u; img.alt=""; img.className="thumb"; box.appendChild(img);
+  }).catch(()=>{});
+}
+$("#btnBack").onclick=()=>showTab("sites");
+$("#btnDetailEdit").onclick=()=>edit(curDetail);
+$("#dCat").onchange=()=>{ const s=curSite(); if(s&&isAdmin()){ s.category=$("#dCat").value; refreshAll(); } };
+$("#dStatus").onchange=()=>setStage(curDetail,$("#dStatus").value,false);
+$("#btnLogAdd").onclick=()=>{
+  const s=curSite(), text=$("#dLogText").value.trim(); if(!s||!text||!isAdmin()) return;
+  s.logs.push({id:uid(),date:$("#dLogDate").value||today(),text});
+  $("#dLogText").value=""; save(); renderDetail();
+};
+$("#dLogs").addEventListener("change",e=>{
+  const f=e.target.dataset.f, s=curSite(); if(!f||!s||!isAdmin()) return;
+  const l=s.logs.find(x=>x.id===e.target.closest(".rec").dataset.id); if(!l) return;
+  if(f==="date" && !e.target.value) return renderDetail();
+  l[f]=e.target.value; save(); if(f==="date") renderDetail();
+});
+$("#dLogs").addEventListener("click",e=>{
+  if(e.target.dataset.act!=="del"||!isAdmin()) return;
+  const s=curSite(), id=e.target.closest(".rec").dataset.id;
+  s.logs=s.logs.filter(x=>x.id!==id); save(); renderDetail();
+});
+$("#dFileIn").addEventListener("change",async e=>{
+  const s=curSite(); if(!s||!isAdmin()) return;
+  const list=[...e.target.files], date=$("#dFileDate").value||today();
+  navigator.storage?.persist?.();
+  try{
+    for(let i=0;i<list.length;i++){
+      const f=list[i], id=uid();
+      setStatus("#dFileStatus",`저장 중… ${i+1}/${list.length}`);
+      await IDB.putFile(id,f);
+      s.files.push({id,name:f.name,type:f.type,size:f.size,date});
+    }
+    save(); setStatus("#dFileStatus",`${list.length}개를 첨부했습니다.`);
+  }catch(err){ save(); setStatus("#dFileStatus","첨부하지 못했습니다: "+err.message,true); }
+  e.target.value=""; renderDetail();
+});
+$("#dFiles").addEventListener("change",e=>{
+  if(e.target.dataset.f!=="date"||!isAdmin()) return;
+  const m=curSite().files.find(x=>x.id===e.target.closest(".rec").dataset.id);
+  if(m && e.target.value){ m.date=e.target.value; save(); } renderDetail();
+});
+/* 사진은 화면에서, PDF는 새 탭에서 열고 그 밖의 파일은 내려받음 (앱 주소에서 실행되지 않도록) */
+$("#dFiles").addEventListener("click",async e=>{
+  const act=e.target.dataset.act; if(!act) return;
+  const s=curSite(), m=s.files.find(x=>x.id===e.target.closest(".rec").dataset.id); if(!m) return;
+  if(act==="del"){
+    if(!isAdmin()) return;
+    s.files=s.files.filter(x=>x!==m); await IDB.delFile(m.id); save(); return renderDetail();
+  }
+  const b=await IDB.getFile(m.id).catch(()=>null);
+  if(!b) return setStatus("#dFileStatus","이 기기에 파일이 없습니다. 전체 백업을 다시 받아 주세요.",true);
+  if(act==="open" && m.type.startsWith("image/") && m.type!=="image/svg+xml"){ $("#photoImg").src=URL.createObjectURL(b); $("#photoView").hidden=false; }
+  else if(act==="open" && m.type==="application/pdf") window.open(URL.createObjectURL(b),"_blank","noopener");
+  else download(m.name,b,m.type);
+});
+$("#photoClose").onclick=()=>{ URL.revokeObjectURL($("#photoImg").src); $("#photoImg").removeAttribute("src"); $("#photoView").hidden=true; };
+
+/* ---------- 입장: 비밀번호 ----------
+   서버가 없으므로 공개 파일 access.json의 해시와 비교한다. 화면을 나누는 장치이며,
+   실제 보호는 현장 데이터가 각 기기에만 있고 저장소에 올라가지 않는다는 데서 나온다. */
+const AUTH_KEY="gridsite.auth", GH_TOKEN_KEY="gridsite.ghToken", MIN_PW=8;
+const ACCESS_API="https://api.github.com/repos/woosups-lab/power-map/contents/access.json";
+let access=null, started=false, gateMode="login";
+const ssGet=k=>{ try{ return sessionStorage.getItem(k); }catch(e){ return null; } };
+const ssSet=(k,v)=>{ try{ sessionStorage.setItem(k,v); }catch(e){} };
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+async function pwHash(pw,saltHex,iter){
+  const salt=Uint8Array.from(saltHex.match(/../g),h=>parseInt(h,16));
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveBits"]);
+  return hex(await crypto.subtle.deriveBits({name:"PBKDF2",hash:"SHA-256",salt,iterations:iter},key,256));
+}
+async function makeEntry(pw){
+  const salt=hex(crypto.getRandomValues(new Uint8Array(16)));
+  return {salt,hash:await pwHash(pw,salt,access.iter)};
+}
+async function matchRole(pw){
+  for(const r of ["admin","viewer"]) if(await pwHash(pw,access[r].salt,access.iter)===access[r].hash) return r;
+  return null;
+}
+const authMark=r=>access[r].hash.slice(0,16);   // 비밀번호가 바뀌면 다시 입력하도록 함
+function rememberRole(r){
+  const v=JSON.stringify({role:r,mark:authMark(r)});
+  if(r==="admin") ssSet(AUTH_KEY,v); else lsSet(AUTH_KEY,v);   // 관리자는 창을 닫으면 해제
+}
+function savedRole(){
+  for(const raw of [ssGet(AUTH_KEY),lsGet(AUTH_KEY)]){
+    try{ const a=JSON.parse(raw); if(a && access[a.role] && a.mark===authMark(a.role)) return a.role; }catch(e){}
+  }
+  return null;
+}
+function applyRole(r){
+  role=r; document.body.dataset.role=r;
+  $("#btnAdmin").textContent=r==="admin"?"관리자 종료":"관리자 모드";
+  $("#roleNote").textContent=r==="admin"?"관리자로 사용 중입니다. 모든 정보를 수정할 수 있습니다.":"이용자로 사용 중입니다. 보기만 가능합니다.";
+  $("#restoreNote").textContent=r==="admin"?" 같은 현장은 백업 내용으로 바뀝니다.":" 이 기기의 현장 데이터는 백업 내용으로 모두 바뀝니다.";
+  if(!started) return;
+  renderMarkers();
+  const cur=document.querySelector(".tabs button[aria-selected=true]")?.dataset.tab;
+  if(!document.querySelector('[data-view="detail"]').hidden) renderDetail();
+  else if(r!=="admin" && cur==="add") showTab("sites");
+}
+function showGate(mode){
+  gateMode=mode; $("#gate").hidden=false; $("#gatePw").value=""; setStatus("#gateStatus","");
+  $("#gateMsg").textContent=mode==="admin"?"관리자 비밀번호를 입력하세요.":"비밀번호를 입력하세요.";
+  $("#gateCancel").hidden=mode!=="admin"; $("#gatePw").focus();
+}
+function enter(r){
+  applyRole(r); $("#gate").hidden=true;
+  if(!started){ started=true; startApp(); }
+}
+$("#gateForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(!access) return setStatus("#gateStatus","접속 정보를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
+  setStatus("#gateStatus","확인 중…");
+  const r=await matchRole($("#gatePw").value);
+  if(!r || (gateMode==="admin" && r!=="admin")) return setStatus("#gateStatus","비밀번호가 맞지 않습니다.",true);
+  rememberRole(r); enter(r);
+});
+$("#gateCancel").onclick=()=>{ $("#gate").hidden=true; };
+$("#btnAdmin").onclick=e=>{
+  e.stopPropagation();
+  if(isAdmin()){ ssSet(AUTH_KEY,""); lsSet(AUTH_KEY,JSON.stringify({role:"viewer",mark:authMark("viewer")})); applyRole("viewer"); }
+  else showGate("admin");
+};
+$("#btnLogout").onclick=()=>{ ssSet(AUTH_KEY,""); lsSet(AUTH_KEY,""); location.reload(); };
+async function gate(){
+  try{ const a=await fetchJson("access.json"); if(a.admin?.hash && a.viewer?.hash) access=a; }catch(e){}
+  if(!access) return setStatus("#gateStatus","접속 정보를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
+  const r=savedRole();
+  if(r) enter(r); else showGate("login");
+}
+
+/* 비밀번호 변경: access.json을 새로 만들어 저장소에 커밋 (토큰이 없으면 파일로 내려받기) */
+$("#ghToken").value=lsGet(GH_TOKEN_KEY)||"";
+$("#btnTokenSave").onclick=()=>{ lsSet(GH_TOKEN_KEY,$("#ghToken").value.trim()); setStatus("#pwStatus","토큰을 이 기기에 저장했습니다."); };
+async function publishAccess(json,token){
+  const headers={Authorization:"Bearer "+token,Accept:"application/vnd.github+json"};
+  const cur=await fetch(ACCESS_API,{headers,cache:"no-store"});
+  if(!cur.ok) throw new Error("토큰을 확인해 주세요 (GitHub 응답 "+cur.status+")");
+  const {sha}=await cur.json();
+  const put=await fetch(ACCESS_API,{method:"PUT",headers,body:JSON.stringify({message:"비밀번호 변경",content:btoa(json),sha})});
+  if(!put.ok) throw new Error("GitHub에 저장하지 못했습니다 (응답 "+put.status+")");
+}
+$("#btnPwApply").onclick=async()=>{
+  if(!isAdmin()) return;
+  const v=$("#pwViewer").value, a=$("#pwAdmin").value;
+  if(!v && !a) return setStatus("#pwStatus","바꿀 비밀번호를 입력하세요.",true);
+  if([v,a].some(p=>p && p.length<MIN_PW)) return setStatus("#pwStatus",`비밀번호는 ${MIN_PW}자 이상으로 해 주세요.`,true);
+  setStatus("#pwStatus","적용 중…");
+  const next={...access};
+  if(v) next.viewer=await makeEntry(v);
+  if(a) next.admin=await makeEntry(a);
+  const json=JSON.stringify(next,null,2)+"\n", token=lsGet(GH_TOKEN_KEY);
+  try{
+    if(token){ await publishAccess(json,token); setStatus("#pwStatus","변경했습니다. 약 1분 뒤 사이트에 반영되고, 이용자는 새 비밀번호로 다시 들어와야 합니다."); }
+    else{ download("access.json",json,"application/json"); setStatus("#pwStatus","access.json을 내려받았습니다. GitHub 저장소의 같은 파일을 이것으로 교체해야 적용됩니다."); }
+    access=next; $("#pwViewer").value=""; $("#pwAdmin").value=""; rememberRole("admin");
+  }catch(err){ setStatus("#pwStatus",err.message,true); }
+};
+
 /* ---------- 오프라인 지도 ----------
    타일을 Cache Storage(TILE_CACHE)에 넣으면 sw.js가 먼저 찾아 응답한다.
    OpenFreeMap 타일 주소의 날짜 부분은 매주 바뀌므로 저장 키에서는 "_"로 고정한다. */
@@ -1104,6 +1433,7 @@ netUI();
 
 /* ---------- 탭·모바일·설정 ---------- */
 function showTab(t){
+  if(t==="add" && !isAdmin()) t="sites";
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));
   document.querySelectorAll(".view").forEach(v=>v.hidden=v.dataset.view!==t);
   $("#panel").classList.remove("collapsed");
@@ -1118,19 +1448,19 @@ $("#btnKey").onclick=()=>{ lsSet("gridsite.kakaoKey",$("#kakaoKey").value.trim()
 let wipeArmed=false;
 $("#btnWipe").onclick=()=>{
   if(!wipeArmed){ wipeArmed=true; setStatus("#wipeStatus","한 번 더 누르면 이 기기의 현장이 모두 지워집니다. 먼저 JSON으로 내보내 두세요.",true); setTimeout(()=>wipeArmed=false,4000); return; }
-  sites=[]; refreshAll(); wipeArmed=false; setStatus("#wipeStatus","지웠습니다.");
+  sites=[]; IDB.clearFiles(); refreshAll(); wipeArmed=false; setStatus("#wipeStatus","지웠습니다.");
 };
 
 /* ---------- 시작 ---------- */
-window.App={setEnd,near,edit};
-(async function init(){
+window.App={setEnd,near,edit,setStage,detail};
+async function startApp(){
   let saved=null; try{ saved=JSON.parse(lsGet(STORE)||"null"); }catch(e){}
-  if(Array.isArray(saved)) sites=saved;
+  if(Array.isArray(saved)) sites=saved.map(normSite);
   else{
     sites=[
-      {id:"ex1",name:"(예시) 충주 태양광+ESS",category:"태양광+ESS",status:"설계",capacity:"PV 1MW / ESS 2MWh",address:"충청북도 충주시",lat:36.991,lng:127.926,memo:"예시 데이터입니다. 지워도 됩니다.",example:true},
-      {id:"ex2",name:"(예시) 남동공단 데이터센터",category:"데이터센터",status:"영업",capacity:"수전 154kV",address:"인천 남동구 남동국가산업단지",lat:37.402,lng:126.700,memo:"예시 데이터입니다.",example:true}
-    ];
+      {id:"ex1",name:"(예시) 충주 태양광+ESS",category:"태양광+ESS",status:"사업개발 중",capacity:"PV 1MW / ESS 2MWh",address:"충청북도 충주시",lat:36.991,lng:127.926,memo:"예시 데이터입니다. 지워도 됩니다.",example:true},
+      {id:"ex2",name:"(예시) 남동공단 데이터센터",category:"데이터센터",status:"EPC 영업 중",capacity:"수전 154kV",address:"인천 남동구 남동국가산업단지",lat:37.402,lng:126.700,memo:"예시 데이터입니다.",example:true}
+    ].map(normSite);
     save();
   }
   renderMarkers(); renderList(); clearForm();
@@ -1139,7 +1469,8 @@ window.App={setEnd,near,edit};
   renderRegions();
   if(matchMedia("(display-mode: standalone)").matches) navigator.storage?.persist?.();
   await IDB.open(); loadGrid();
-})();
+}
+gate();
 </script>
 </body>
 </html>
