@@ -1,0 +1,66 @@
+name: 전력설비 갱신 및 배포
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 18 * * 0"   # 매주 월요일 03:00 (KST)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update-grid:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - run: node scripts/build-grid.mjs
+      - name: 바뀐 데이터 커밋
+        run: |
+          git add grid.json grid-meta.json
+          if git diff --cached --quiet; then
+            echo "바뀐 내용이 없습니다."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "전력설비 데이터 갱신"
+            git push
+          fi
+
+  deploy:
+    needs: update-grid
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: 공개할 파일만 모으기
+        run: |
+          mkdir _site
+          cp -r index.html sw.js manifest.webmanifest grid.json grid-meta.json icons vendor _site/
+          # 앱 파일이 바뀔 때만 서비스 워커 버전이 바뀌도록 해시를 넣음
+          BUILD=$(cat index.html manifest.webmanifest sw.js $(find icons vendor -type f | sort) | sha256sum | cut -c1-12)
+          sed -i "s/__BUILD__/$BUILD/" _site/sw.js
+          echo "빌드 $BUILD"; du -sh _site
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>현장 전력지도</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6bcb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="전력지도">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<style>
+/* Layout: 데스크톱은 좌측 패널 + 지도, 폰은 지도 전체 + 아래에서 올라오는 패널 */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --fg:#17202b; --muted:#5d6b7a; --line:#d9e0e7;
+  --accent:#0b6bcb; --accent-ink:#ffffff; --warn:#b54708; --chip:#eef3f8;
+  --v765:#7b3fa0; --v345:#d7301f; --v154:#f08c00; --v66:#1f8fb8; --vunk:#8a96a3;
+  --font:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Noto Sans CJK KR",system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f141a; --panel:#161d25; --fg:#e6ebf0; --muted:#94a3b3; --line:#2a3440;
+    --accent:#4da3ff; --accent-ink:#06121f; --warn:#f5a25d; --chip:#1e2832; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{font:14px/1.5 var(--font);background:var(--bg);color:var(--fg);display:flex;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+#panel{width:380px;flex:0 0 380px;height:100%;background:var(--panel);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;z-index:1000;padding-top:env(safe-area-inset-top,0px)}
+#map{flex:1;height:100%;position:relative}
+header.top{padding:14px 16px 10px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+header.top h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-.01em;flex:1}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;padding:10px 4px;cursor:pointer;color:var(--muted);font-weight:500;border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.view{flex:1;overflow:auto;padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px;
+  padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+.view>*{flex-shrink:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+input[type=text],input[type=search],input[type=number],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);
+  border-radius:6px;background:var(--bg);color:var(--fg);font-size:14px}
+textarea{min-height:64px;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1;min-width:0}
+.btn{padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:var(--panel);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.small{padding:4px 8px;font-size:12px}
+.btn:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h2{font-size:13px;margin:6px 0 0;color:var(--muted);font-weight:600;letter-spacing:.04em}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.item{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--panel)}
+.item:last-child{border-bottom:0}
+.item:hover{background:var(--chip)}
+.item .dot{width:12px;height:12px;border-radius:50%}
+.item .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .sub{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .meta{font-size:12px;color:var(--muted);font-family:var(--mono);text-align:right}
+.chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--chip);color:var(--muted)}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px}
+.legend span,.legend label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.toggles input{margin:0}
+.legend i{display:inline-block;width:22px;height:4px;border-radius:2px}
+.status{font-size:12px;color:var(--muted);min-height:18px}
+.status.err{color:var(--warn)}
+progress{width:100%;height:8px;accent-color:var(--accent)}
+.chip.off{background:var(--warn);color:var(--panel);font-weight:600}
+.region{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.region:last-child{border-bottom:0}
+.region .acts{display:flex;gap:4px}
+.route{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.route:last-child{border-bottom:0}
+.route .sw{width:14px;height:6px;border-radius:3px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.leaflet-popup-content{font:13px/1.5 var(--font);margin:12px 14px;min-width:200px}
+.leaflet-popup-content b{font-size:14px}
+.pop-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.pop-actions button{font-size:12px;padding:3px 7px;border:1px solid #c8d1da;border-radius:5px;background:#fff;color:#17202b;cursor:pointer}
+.site-pin{width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+#mobileToggle{display:none}
+@media (max-width: 760px){
+  body{flex-direction:column}
+  #map{position:fixed;inset:0;height:auto}
+  #panel{position:fixed;left:0;right:0;bottom:0;width:auto;height:62%;border-right:0;border-top:1px solid var(--line);
+    border-radius:14px 14px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.2);transition:transform .25s ease;padding-top:0}
+  #panel.collapsed{transform:translateY(calc(100% - 52px))}
+  header.top{cursor:pointer}
+  #mobileToggle{display:inline-flex}
+  .view{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+@media (prefers-reduced-motion: reduce){ #panel{transition:none} }
+</style>
+</head>
+<body>
+<aside id="panel">
+  <header class="top" id="panelHead">
+    <h1>현장 전력지도</h1>
+    <span class="chip off" id="netChip" hidden>오프라인</span>
+    <span class="chip" id="countChip">0개 현장</span>
+    <button class="btn small" id="mobileToggle" aria-label="패널 접기/펴기">▾</button>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="sites" aria-selected="true">현장</button>
+    <button role="tab" data-tab="add" aria-selected="false">추가·가져오기</button>
+    <button role="tab" data-tab="route" aria-selected="false">경로</button>
+    <button role="tab" data-tab="offline" aria-selected="false">오프라인</button>
+    <button role="tab" data-tab="settings" aria-selected="false">설정</button>
+  </nav>
+
+  <!-- 현장 목록 -->
+  <section class="view" data-view="sites">
+    <input type="search" id="q" placeholder="현장명, 주소, 메모 검색">
+    <div class="row">
+      <select id="fCat"><option value="">전체 구분</option></select>
+      <select id="fStatus"><option value="">전체 단계</option></select>
+    </div>
+    <div class="list" id="siteList"></div>
+    <h2>송전선로 (전압별)</h2>
+    <div class="legend toggles">
+      <label><input type="checkbox" id="lv765" checked><i style="background:var(--v765)"></i>765kV</label>
+      <label><input type="checkbox" id="lv345" checked><i style="background:var(--v345)"></i>345kV</label>
+      <label><input type="checkbox" id="lv154" checked><i style="background:var(--v154)"></i>154kV</label>
+      <label><input type="checkbox" id="lv66" checked><i style="background:var(--v66)"></i>66kV 이하</label>
+      <label><input type="checkbox" id="lvunk" checked><i style="background:var(--vunk)"></i>전압 미상</label>
+      <label><input type="checkbox" id="lvSub" checked><i style="background:var(--v154);width:10px;height:10px;border-radius:50%;border:1.5px solid #1b1f24"></i>변전소</label>
+      <label><input type="checkbox" id="lvPlant" checked><i style="background:#e8a400;width:10px;height:10px;border-radius:2px;border:1px solid #fff;outline:1px solid #1b1f24"></i>발전소</label>
+      <label><input type="checkbox" id="lvMinor"><i style="background:var(--v66);height:2px;opacity:.6"></i>배전선로</label>
+    </div>
+    <p class="status" id="infraStatus"></p>
+    <h2>지형 정보</h2>
+    <div class="legend toggles">
+      <label><input type="checkbox" id="tg-road" checked>도로</label>
+      <label><input type="checkbox" id="tg-water" checked>하천·호수</label>
+      <label><input type="checkbox" id="tg-mountain" checked>산·지형 음영</label>
+      <label><input type="checkbox" id="tg-building" checked>건물</label>
+      <label><input type="checkbox" id="tg-label" checked>지명·시설명</label>
+      <label><input type="checkbox" id="tg-boundary" checked>행정경계</label>
+    </div>
+    <p class="hint" id="baseNote" hidden>지형 정보 선택은 설정 탭의 배경 지도가 ‘항목 선택 지도’일 때 적용됩니다.</p>
+    <p class="hint">송전선로·변전소·발전소는 OpenInfraMap과 같은 OpenStreetMap 데이터입니다. 매주 자동으로 갱신되며, 이 기기에 저장해 두고 새 날짜의 데이터가 나왔을 때만 다시 받습니다.</p>
+  </section>
+
+  <!-- 추가/가져오기 -->
+  <section class="view" data-view="add" hidden>
+    <h2>현장 정보</h2>
+    <input type="hidden" id="eId">
+    <label class="f">현장명<input type="text" id="eName" placeholder="예: 충주 ○○ 태양광+ESS"></label>
+    <div class="row">
+      <label class="f">구분<select id="eCat"></select></label>
+      <label class="f">진행 단계<select id="eStatus"></select></label>
+    </div>
+    <label class="f">용량 / 규모<input type="text" id="eCap" placeholder="예: PV 2.5MW / ESS 10MWh"></label>
+    <label class="f">주소<input type="text" id="eAddr" placeholder="도로명 또는 지번 주소"></label>
+    <div class="row">
+      <button class="btn" id="btnGeocode">주소로 위치 찾기</button>
+      <button class="btn" id="btnPick">지도에서 찍기</button>
+    </div>
+    <label class="f">좌표 또는 지도 링크 붙여넣기
+      <input type="text" id="eLink" placeholder="카카오맵 공유링크, 구글맵 URL, 36.12, 127.45 등"></label>
+    <div class="row">
+      <label class="f">위도<input type="number" step="any" id="eLat"></label>
+      <label class="f">경도<input type="number" step="any" id="eLng"></label>
+    </div>
+    <label class="f">메모<textarea id="eMemo" placeholder="담당자, 연계 변전소, 특이사항 등"></textarea></label>
+    <div class="row">
+      <button class="btn primary" id="btnSave">현장 저장</button>
+      <button class="btn" id="btnClear">새로 입력</button>
+      <button class="btn" id="btnDelete" hidden>삭제</button>
+    </div>
+    <p class="status" id="editStatus"></p>
+
+    <h2>파일로 한꺼번에 가져오기</h2>
+    <p class="hint">구글어스 KML·KMZ, 엑셀에서 저장한 CSV(현장명·주소 또는 위도·경도 열), 이 프로그램에서 내보낸 JSON을 받습니다.</p>
+    <input type="file" id="fileIn" accept=".kml,.kmz,.csv,.json,.txt">
+    <p class="status" id="importStatus"></p>
+
+    <h2>내보내기</h2>
+    <div class="row">
+      <button class="btn" id="expJson">JSON</button>
+      <button class="btn" id="expCsv">CSV(엑셀)</button>
+      <button class="btn" id="expKml">KML(구글어스)</button>
+    </div>
+    <p class="hint">현장 정보는 이 기기에만 저장되고 어디로도 전송되지 않습니다. 다른 기기와 맞추려면 JSON으로 내보낸 파일을 그 기기에서 가져오세요. 공개 저장소이므로 내보낸 파일을 저장소에 올리지 마세요.</p>
+  </section>
+
+  <!-- 경로 -->
+  <section class="view" data-view="route" hidden>
+    <label class="f">출발<select id="rFrom"></select></label>
+    <label class="f">도착<select id="rTo"></select></label>
+    <div class="row">
+      <button class="btn primary" id="btnRoute">경로 찾기</button>
+      <button class="btn" id="btnSwap">↕ 바꾸기</button>
+      <button class="btn" id="btnClearRoute">지우기</button>
+    </div>
+    <p class="status" id="routeStatus"></p>
+    <div class="list" id="routeList" hidden></div>
+    <div id="routeExtra"></div>
+    <h2>현장 주변 변전소</h2>
+    <div class="row">
+      <select id="nearSite"></select>
+      <button class="btn" id="btnNear" style="flex:0 0 auto">찾기</button>
+    </div>
+    <label class="f">검색 반경
+      <select id="nearR"><option value="10000">10 km</option><option value="20000" selected>20 km</option><option value="40000">40 km</option></select></label>
+    <div class="list" id="nearList" hidden></div>
+    <p class="status" id="nearNote"></p>
+    <p class="hint">주변 변전소는 이 기기에 저장된 데이터로 계산하므로 오프라인에서도 됩니다. 거리는 직선거리입니다. 도로 경로는 OSRM(OpenStreetMap 기반)으로 최대 3개 대안을 보여주며 인터넷이 필요합니다. 실제 교통 반영 길찾기는 각 경로의 ‘카카오맵’ 버튼으로 이어집니다.</p>
+  </section>
+
+  <!-- 오프라인 지도 -->
+  <section class="view" data-view="offline" hidden>
+    <h2>배경지도 미리 저장</h2>
+    <p class="hint">출장 전에 관심 지역을 저장해 두면 인터넷 없이도 배경지도가 나옵니다. ‘항목 선택 지도’만 저장할 수 있고, 일반 지도·위성 사진은 온라인에서만 보입니다.</p>
+    <label class="f">지역<select id="dlArea"></select></label>
+    <label class="f" id="dlRadiusWrap" hidden>현장 주변 반경
+      <select id="dlRadius"><option value="5">5 km</option><option value="10" selected>10 km</option><option value="20">20 km</option><option value="40">40 km</option></select></label>
+    <label class="f">상세도
+      <select id="dlZoom"><option value="11">시·군 (도로 큰 줄기)</option><option value="12">읍·면 (대부분의 도로)</option><option value="13" selected>마을 (골목 일부)</option><option value="14">최대 (건물까지)</option></select></label>
+    <label class="f">저장 이름<input type="text" id="dlName" placeholder="비워 두면 지역 이름으로 저장"></label>
+    <p class="status" id="dlEstimate"></p>
+    <div class="row">
+      <button class="btn primary" id="btnDl">이 지역 저장</button>
+      <button class="btn" id="btnDlCancel" hidden>중지</button>
+    </div>
+    <progress id="dlProgress" max="1" value="0" hidden></progress>
+    <p class="status" id="dlStatus"></p>
+    <h2>저장한 지역</h2>
+    <div class="list" id="dlList"></div>
+    <p class="hint" id="dlUsage"></p>
+  </section>
+
+  <!-- 설정 -->
+  <section class="view" data-view="settings" hidden>
+    <h2>앱으로 설치</h2>
+    <button class="btn" id="btnInstall" hidden>이 기기에 설치</button>
+    <p class="hint" id="installHint">윈도우·맥(크롬·엣지)은 주소창 오른쪽의 설치 아이콘, 안드로이드는 메뉴의 ‘홈 화면에 추가’, 아이폰·맥 사파리는 공유 버튼의 ‘홈 화면에 추가’(맥은 ‘Dock에 추가’)로 설치합니다.</p>
+    <h2>주소 검색 정확도</h2>
+    <label class="f">카카오 JavaScript 키 (선택)
+      <input type="text" id="kakaoKey" placeholder="developers.kakao.com 에서 발급"></label>
+    <button class="btn" id="btnKey">키 저장</button>
+    <p class="hint">키가 없으면 OpenStreetMap 주소 검색을 씁니다. 한국 지번 주소는 잘 못 찾는 경우가 많아, 카카오 키를 넣는 것을 권합니다. 키를 발급할 때 이 프로그램을 여는 사이트 주소(예: GitHub Pages 주소)를 플랫폼 도메인에 등록해야 합니다.</p>
+    <h2>배경 지도</h2>
+    <select id="baseSel"><option value="vector">항목 선택 지도 (도로·하천·산·건물 켜고 끄기)</option><option value="esri">일반 지도 (Esri)</option><option value="sat">위성 사진</option><option value="osm">OpenStreetMap (웹에 올렸을 때만)</option></select>
+    <h2>데이터</h2>
+    <p class="hint">현장 정보는 지금 쓰는 브라우저(또는 설치한 앱) 안에 저장됩니다. 브라우저와 설치한 앱의 저장 공간이 다른 기기도 있으니, 기기를 바꾸거나 앱을 지우기 전에 JSON으로 내보내 두세요.</p>
+    <button class="btn" id="btnRegrid">전력설비 다시 받기</button>
+    <p class="hint">전력설비 데이터는 매주 자동으로 갱신됩니다. 시작할 때 새 날짜가 있으면 알아서 받으므로 평소에는 누를 필요가 없습니다.</p>
+    <button class="btn" id="btnWipe">이 기기의 현장 모두 지우기</button>
+    <p class="status" id="wipeStatus"></p>
+  </section>
+</aside>
+<div id="map"></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/maplibre-gl-csp.js"></script>
+<script src="vendor/leaflet-maplibre-gl.js"></script>
+<script>
+/* 워커를 별도 파일로 두어야 사파리에서도 서비스 워커가 타일 요청을 받음 */
+if(window.maplibregl) maplibregl.setWorkerUrl("vendor/maplibre-gl-csp-worker.js");
+</script>
+<script>
+"use strict";
+/* ---------- 기본 상수 ---------- */
+const CATS = {"태양광":"#e8a400","ESS":"#0b6bcb","태양광+ESS":"#2f9e44","풍력":"#12a4b6","데이터센터":"#6741d9","수전·변전":"#c2255c","기타":"#5d6b7a"};
+const STATUSES = ["영업","설계","시공","준공·운영","보류"];
+const ROUTE_COLORS = ["#0b6bcb","#e8590c","#2f9e44"];
+const STORE = "gridsite.sites.v1";
+const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k,v); return true; } catch(e){ return false; } };
+const fetchJson = async u => { const r=await fetch(u,{cache:"no-store"}); if(!r.ok) throw new Error("서버 응답 "+r.status); return r.json(); };
+const isOffline = () => navigator.onLine===false;
+
+function haversine(a, b){
+  const R=6371, r=Math.PI/180, dLat=(b.lat-a.lat)*r, dLng=(b.lng-a.lng)*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+const km = d => d < 10 ? d.toFixed(2)+" km" : d.toFixed(1)+" km";
+const mins = s => { const m=Math.round(s/60); return m<60? m+"분" : Math.floor(m/60)+"시간 "+(m%60)+"분"; };
+
+/* ---------- 상태 ---------- */
+let sites = [];
+const substations = new Map();   // id -> {id,name,lat,lng,voltage,operator}
+let picking = false;
+
+function save(){ if(!lsSet(STORE, JSON.stringify(sites))) setStatus("#infraStatus","현장을 기기에 저장하지 못했습니다. 저장 공간을 확인하고 JSON으로 내보내 두세요.",true); }
+function setStatus(el, msg, err){ const e=$(el); e.textContent=msg||""; e.classList.toggle("err",!!err); }
+
+/* ---------- 지도 ---------- */
+const map = L.map("map",{zoomControl:true, preferCanvas:true}).setView([36.4,127.8],7);
+/* 배경 지도: 벡터 지도(OpenFreeMap, 키 불필요)는 도로·하천·산·건물 등을 켜고 끌 수 있음 */
+const BASE_GROUPS={road:["transportation","transportation_name","aeroway"],water:["water","waterway","water_name"],
+  mountain:["landcover","park","mountain_peak"],building:["building"],label:["place","poi","aerodrome_label","housenumber"],boundary:["boundary"]};
+function groupOf(layer){
+  if(layer.id==="gs-hillshade") return "mountain";
+  const sl=layer["source-layer"]; if(!sl) return null;
+  for(const [g,arr] of Object.entries(BASE_GROUPS)) if(arr.includes(sl)) return g;
+  return null;
+}
+const OFM="https://tiles.openfreemap.org", STYLE_URL=OFM+"/styles/liberty", TILEJSON_URL=OFM+"/planet";
+const DEM_URL="https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png", DEM_MAXZ=11;
+let glMap=null, vectorReady=false;
+function makeVector(){
+  const layer=L.maplibreGL({style:STYLE_URL,
+    attribution:'<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> © OpenMapTiles © OpenStreetMap'});
+  layer.on("add",()=>{
+    glMap=layer.getMaplibreMap();
+    if(layer._gsDone){ vectorReady=true; applyBaseGroups(); return; }
+    vectorReady=false;
+    glMap.once("load",()=>{ layer._gsDone=true;
+      try{
+        const layers=glMap.getStyle().layers;
+        // 지형 음영(산): 공개 고도 타일
+        if(!glMap.getSource("gs-dem")) glMap.addSource("gs-dem",{type:"raster-dem",tiles:[DEM_URL],encoding:"terrarium",tileSize:256,maxzoom:DEM_MAXZ});
+        const before=(layers.find(l=>l["source-layer"]==="transportation"||l["source-layer"]==="building")||{}).id;
+        if(!glMap.getLayer("gs-hillshade")) glMap.addLayer({id:"gs-hillshade",type:"hillshade",source:"gs-dem",paint:{"hillshade-exaggeration":0.35,"hillshade-shadow-color":"#4b5a4b"}},before);
+        // 지명은 한글 우선
+        for(const l of layers){
+          const tf=l.layout&&l.layout["text-field"];
+          if(tf && !JSON.stringify(tf).includes("ref")) glMap.setLayoutProperty(l.id,"text-field",["coalesce",["get","name:ko"],["get","name"]]);
+        }
+      }catch(e){}
+      vectorReady=true; applyBaseGroups();
+    });
+  });
+  return layer;
+}
+function applyBaseGroups(){
+  if(!glMap || !vectorReady) return;
+  for(const l of glMap.getStyle().layers){
+    const g=groupOf(l); if(!g) continue;
+    const el=document.getElementById("tg-"+g);
+    try{ glMap.setLayoutProperty(l.id,"visibility", !el||el.checked ? "visible":"none"); }catch(e){}
+  }
+}
+const bases = {
+  vector: (typeof L.maplibreGL==="function") ? makeVector() : null,
+  esri: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Esri World Street Map"}),
+  sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Esri World Imagery"}),
+  osm: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap"})
+};
+let baseKey = lsGet("gridsite.base") || "vector";
+if(!bases[baseKey] || (location.protocol==="file:" && baseKey==="osm") || (isOffline() && bases.vector)) baseKey = bases.vector ? "vector" : "esri";
+let curBase = null;
+function setBase(k){
+  if(curBase) map.removeLayer(curBase);
+  baseKey=k; curBase=bases[k].addTo(map); curBase.bringToBack?.();
+  const sel=document.querySelector("#baseSel"); if(sel) sel.value=k;
+  const note=document.querySelector("#baseNote"); if(note) note.hidden = k==="vector";
+  if(k==="vector") setTimeout(()=>{ if(baseKey!=="vector" || vectorReady) return;
+    if(isOffline()) return setStatus("#infraStatus","오프라인이라 배경지도를 불러오지 못했습니다. 온라인일 때 한 번 열어 두거나 오프라인 탭에서 지역을 저장하세요.",true);
+    setBase("esri");
+    setStatus("#infraStatus","항목 선택 지도를 불러오지 못해 일반 지도로 바꿨습니다. 설정 탭에서 다시 고를 수 있습니다.",true); },12000);
+}
+setBase(baseKey);
+let tileErrors = 0;
+for(const [k,l] of Object.entries(bases)) if(l && l.on && k!=="vector") l.on("tileerror",()=>{
+  if(l!==curBase || ++tileErrors<6) return;
+  tileErrors=0;
+  if(isOffline()){ if(bases.vector) setBase("vector"); }
+  else if(k!=="esri") setBase("esri");
+});
+map.attributionControl.addAttribution("전력설비: OpenStreetMap 기여자 (ODbL)");
+const siteLayer = L.layerGroup().addTo(map);
+const voltLayers = {"765":L.layerGroup(),"345":L.layerGroup(),"154":L.layerGroup(),"66":L.layerGroup(),"unk":L.layerGroup()};
+const subLayer = L.layerGroup();
+const plantBig = L.layerGroup(), plantSmall = L.layerGroup();
+const plantLayer = L.layerGroup([plantBig]);
+const routeLayer = L.layerGroup().addTo(map);
+const minorLayer = L.layerGroup();
+const markers = new Map();
+
+function siteIcon(s){
+  const c = CATS[s.category] || CATS["기타"];
+  return L.divIcon({className:"", html:`<div class="site-pin" style="background:${c}"></div>`, iconSize:[18,18], iconAnchor:[9,18], popupAnchor:[0,-16]});
+}
+function sitePopup(s){
+  return `<b>${esc(s.name)}</b><br><span style="color:#5d6b7a">${esc(s.category)} · ${esc(s.status)}${s.capacity? " · "+esc(s.capacity):""}</span>
+   ${s.address? `<br>${esc(s.address)}`:""}${s.memo? `<br><i>${esc(s.memo)}</i>`:""}
+   <br><span style="font-family:monospace;font-size:11px">${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</span>
+   <div class="pop-actions">
+    <button onclick="App.setEnd('from','site:${s.id}')">출발로</button>
+    <button onclick="App.setEnd('to','site:${s.id}')">도착으로</button>
+    <button onclick="App.near('${s.id}')">주변 변전소</button>
+    <button onclick="App.edit('${s.id}')">수정</button>
+   </div>`;
+}
+function renderMarkers(){
+  siteLayer.clearLayers(); markers.clear();
+  for(const s of sites){
+    const m = L.marker([s.lat,s.lng],{icon:siteIcon(s), title:s.name}).bindPopup(sitePopup(s));
+    m.bindTooltip(s.name,{direction:"top",offset:[0,-16]});
+    m.addTo(siteLayer); markers.set(s.id,m);
+  }
+}
+
+/* ---------- 현장 목록 ---------- */
+function fillSelect(sel, items, first){
+  sel.innerHTML = (first? `<option value="">${first}</option>`:"") + items.map(v=>`<option>${esc(v)}</option>`).join("");
+}
+fillSelect($("#fCat"), Object.keys(CATS), "전체 구분");
+fillSelect($("#fStatus"), STATUSES, "전체 단계");
+fillSelect($("#eCat"), Object.keys(CATS));
+fillSelect($("#eStatus"), STATUSES);
+
+function renderList(){
+  const q = $("#q").value.trim().toLowerCase(), fc=$("#fCat").value, fs=$("#fStatus").value;
+  const rows = sites.filter(s => (!fc||s.category===fc) && (!fs||s.status===fs) &&
+     (!q || [s.name,s.address,s.memo,s.capacity].join(" ").toLowerCase().includes(q)))
+     .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+  $("#siteList").innerHTML = rows.length ? rows.map(s=>`
+    <div class="item" data-id="${s.id}" tabindex="0">
+      <span class="dot" style="background:${CATS[s.category]||CATS["기타"]}"></span>
+      <div style="min-width:0"><div class="nm">${esc(s.name)}</div><div class="sub">${esc(s.address||s.memo||"")}</div></div>
+      <div class="meta">${esc(s.status)}${s.example?'<br><span class="chip">예시</span>':""}</div>
+    </div>`).join("") : `<div class="item" style="cursor:default;grid-template-columns:1fr"><span class="sub">${sites.length? "조건에 맞는 현장이 없습니다." : "아직 현장이 없습니다. ‘추가·가져오기’ 탭에서 등록하세요."}</span></div>`;
+  $("#countChip").textContent = sites.length + "개 현장";
+  renderEndSelects();
+}
+$("#siteList").addEventListener("click", e=>{ const it=e.target.closest(".item[data-id]"); if(it) focusSite(it.dataset.id); });
+$("#siteList").addEventListener("keydown", e=>{ if(e.key==="Enter"){ const it=e.target.closest(".item[data-id]"); if(it) focusSite(it.dataset.id);} });
+["#q","#fCat","#fStatus"].forEach(s=>$(s).addEventListener("input",renderList));
+
+function focusSite(id){
+  const s = sites.find(x=>x.id===id); if(!s) return;
+  map.setView([s.lat,s.lng], Math.max(map.getZoom(),13));
+  markers.get(id)?.openPopup();
+  if(isMobile()) $("#panel").classList.add("collapsed");
+}
+function refreshAll(){ save(); renderMarkers(); renderList(); }
+
+/* ---------- 편집 ---------- */
+function clearForm(){
+  ["#eId","#eName","#eCap","#eAddr","#eLink","#eLat","#eLng","#eMemo"].forEach(s=>$(s).value="");
+  $("#eCat").value="태양광"; $("#eStatus").value="영업"; $("#btnDelete").hidden=true; setStatus("#editStatus","");
+}
+function edit(id){
+  const s = sites.find(x=>x.id===id); if(!s) return;
+  $("#eId").value=s.id; $("#eName").value=s.name; $("#eCat").value=s.category; $("#eStatus").value=s.status;
+  $("#eCap").value=s.capacity||""; $("#eAddr").value=s.address||""; $("#eLat").value=s.lat; $("#eLng").value=s.lng;
+  $("#eMemo").value=s.memo||""; $("#btnDelete").hidden=false; showTab("add");
+  setStatus("#editStatus","‘"+s.name+"’ 수정 중");
+}
+$("#btnClear").onclick = clearForm;
+$("#btnSave").onclick = () => {
+  const lat=parseFloat($("#eLat").value), lng=parseFloat($("#eLng").value), name=$("#eName").value.trim();
+  if(!name) return setStatus("#editStatus","현장명을 입력하세요.",true);
+  if(!isFinite(lat)||!isFinite(lng)) return setStatus("#editStatus","위치가 없습니다. 주소로 찾거나 지도에서 찍거나 좌표를 넣으세요.",true);
+  const id = $("#eId").value || uid();
+  const rec = {id,name,category:$("#eCat").value,status:$("#eStatus").value,capacity:$("#eCap").value.trim(),
+    address:$("#eAddr").value.trim(),lat,lng,memo:$("#eMemo").value.trim(),source:"직접 입력"};
+  const i = sites.findIndex(x=>x.id===id);
+  if(i>=0) sites[i]={...sites[i],...rec, example:false}; else sites.push(rec);
+  refreshAll(); clearForm(); setStatus("#editStatus","저장했습니다: "+name);
+  map.setView([lat,lng],13); markers.get(id)?.openPopup();
+};
+let delArmed=false;
+$("#btnDelete").onclick = () => {
+  if(!delArmed){ delArmed=true; $("#btnDelete").textContent="한 번 더 누르면 삭제"; setTimeout(()=>{delArmed=false;$("#btnDelete").textContent="삭제";},3000); return; }
+  sites = sites.filter(x=>x.id!==$("#eId").value); delArmed=false; $("#btnDelete").textContent="삭제";
+  refreshAll(); clearForm(); setStatus("#editStatus","삭제했습니다.");
+};
+$("#btnPick").onclick = () => {
+  picking=true; map.getContainer().style.cursor="crosshair";
+  setStatus("#editStatus","지도에서 현장 위치를 누르세요.");
+  if(isMobile()) $("#panel").classList.add("collapsed");
+};
+map.on("click", e=>{
+  if(!picking) return;
+  picking=false; map.getContainer().style.cursor="";
+  $("#eLat").value=e.latlng.lat.toFixed(6); $("#eLng").value=e.latlng.lng.toFixed(6);
+  setStatus("#editStatus","위치를 찍었습니다. 저장을 누르세요.");
+  showTab("add"); $("#panel").classList.remove("collapsed");
+  reverseGeocode(e.latlng.lat,e.latlng.lng).then(a=>{ if(a && !$("#eAddr").value) $("#eAddr").value=a; });
+});
+
+/* 링크/좌표 해석: 카카오맵 link/map, 구글맵 @lat,lng, 일반 좌표 */
+function parseLink(t){
+  t = decodeURIComponent(t||"");
+  let m = t.match(/map\.kakao\.com\/link\/(?:map|to|from)\/([^,]*),(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if(m) return {name:m[1], lat:+m[2], lng:+m[3]};
+  m = t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/); if(m) return {lat:+m[1],lng:+m[2]};
+  m = t.match(/[?&](?:q|ll|query)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/); if(m) return {lat:+m[1],lng:+m[2]};
+  m = t.match(/(3[3-9]\.\d+)\s*[, ]\s*(12[4-9]\.\d+|13[0-2]\.\d+)/); if(m) return {lat:+m[1],lng:+m[2]};
+  m = t.match(/(12[4-9]\.\d+|13[0-2]\.\d+)\s*[, ]\s*(3[3-9]\.\d+)/); if(m) return {lat:+m[2],lng:+m[1]};
+  return null;
+}
+$("#eLink").addEventListener("change", ()=>{
+  const v=$("#eLink").value; const p=parseLink(v);
+  if(p){ $("#eLat").value=p.lat; $("#eLng").value=p.lng; if(p.name && !$("#eName").value) $("#eName").value=p.name;
+    map.setView([p.lat,p.lng],14); setStatus("#editStatus","좌표를 읽었습니다.");
+  } else if(/kko\.to|place\.map\.kakao\.com/.test(v)){
+    setStatus("#editStatus","카카오 짧은 링크는 브라우저에서 좌표를 바로 읽을 수 없습니다. 장소명이나 주소를 ‘주소’ 칸에 넣고 위치 찾기를 눌러 주세요.",true);
+  } else setStatus("#editStatus","링크에서 좌표를 찾지 못했습니다.",true);
+});
+
+/* ---------- 주소 검색 ---------- */
+let kakaoReady = null;
+function loadKakao(){
+  const key = lsGet("gridsite.kakaoKey"); if(!key) return Promise.resolve(false);
+  if(kakaoReady) return kakaoReady;
+  kakaoReady = new Promise(res=>{
+    const s=document.createElement("script");
+    s.src=`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&libraries=services&autoload=false`;
+    s.onload=()=>{ try{ kakao.maps.load(()=>res(true)); }catch(e){ res(false); } };
+    s.onerror=()=>res(false); document.head.appendChild(s);
+    setTimeout(()=>res(false),8000);
+  });
+  return kakaoReady;
+}
+async function geocode(q){
+  if(isOffline()) return null;
+  if(await loadKakao()){
+    const r = await new Promise(res=>{
+      const g=new kakao.maps.services.Geocoder();
+      g.addressSearch(q,(d,st)=>{
+        if(st===kakao.maps.services.Status.OK && d.length) return res({lat:+d[0].y,lng:+d[0].x,label:d[0].address_name});
+        new kakao.maps.services.Places().keywordSearch(q,(p,st2)=>{
+          res(st2===kakao.maps.services.Status.OK && p.length ? {lat:+p[0].y,lng:+p[0].x,label:p[0].place_name+" · "+(p[0].road_address_name||p[0].address_name)} : null);
+        });
+      });
+    });
+    if(r) return r;
+  }
+  const u="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&accept-language=ko&q="+encodeURIComponent(q);
+  const j = await fetch(u).then(r=>r.json()).catch(()=>[]);
+  return j[0] ? {lat:+j[0].lat,lng:+j[0].lon,label:j[0].display_name} : null;
+}
+async function reverseGeocode(lat,lng){
+  if(isOffline()) return null;
+  if(await loadKakao()){
+    return new Promise(res=>new kakao.maps.services.Geocoder().coord2Address(lng,lat,(d,st)=>{
+      res(st===kakao.maps.services.Status.OK && d[0] ? (d[0].road_address?.address_name || d[0].address?.address_name) : null);
+    }));
+  }
+  const j = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ko&lat=${lat}&lon=${lng}`).then(r=>r.json()).catch(()=>null);
+  return j?.display_name || null;
+}
+$("#btnGeocode").onclick = async ()=>{
+  const q=$("#eAddr").value.trim(); if(!q) return setStatus("#editStatus","주소를 먼저 입력하세요.",true);
+  if(isOffline()) return setStatus("#editStatus","주소 검색은 인터넷이 필요합니다. 오프라인에서는 지도에서 찍거나 좌표를 넣어 주세요.",true);
+  setStatus("#editStatus","찾는 중…");
+  const r = await geocode(q);
+  if(!r) return setStatus("#editStatus","주소를 찾지 못했습니다. 설정에서 카카오 키를 넣거나 지도에서 직접 찍어 주세요.",true);
+  $("#eLat").value=r.lat.toFixed(6); $("#eLng").value=r.lng.toFixed(6);
+  map.setView([r.lat,r.lng],15); setStatus("#editStatus","찾았습니다: "+r.label);
+};
+
+/* ---------- 가져오기 ---------- */
+$("#fileIn").addEventListener("change", async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  setStatus("#importStatus","읽는 중…");
+  try{
+    const ext=f.name.split(".").pop().toLowerCase(); let recs=[];
+    if(ext==="kmz"){ const z=await JSZip.loadAsync(f); const k=Object.keys(z.files).find(n=>n.toLowerCase().endsWith(".kml"));
+      recs=parseKML(await z.file(k).async("string")); }
+    else if(ext==="kml") recs=parseKML(await f.text());
+    else if(ext==="json"){ const j=JSON.parse(await f.text()); recs=(Array.isArray(j)?j:j.sites||[]); }
+    else recs=await parseCSVFile(f);
+    const added = await mergeRecords(recs, f.name);
+    setStatus("#importStatus",`${added}개 현장을 가져왔습니다.`);
+  }catch(err){ setStatus("#importStatus","가져오지 못했습니다: "+err.message,true); }
+  e.target.value="";
+});
+function parseKML(text){
+  const doc=new DOMParser().parseFromString(text,"text/xml"); const out=[];
+  doc.querySelectorAll("Placemark").forEach(pm=>{
+    const name=pm.querySelector("name")?.textContent.trim()||"이름 없음";
+    const desc=(pm.querySelector("description")?.textContent||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();
+    const c=pm.querySelector("Point coordinates") || pm.querySelector("coordinates"); if(!c) return;
+    const pts=c.textContent.trim().split(/\s+/).map(p=>p.split(",").map(Number)).filter(p=>isFinite(p[0])&&isFinite(p[1]));
+    if(!pts.length) return;
+    const lng=pts.reduce((a,p)=>a+p[0],0)/pts.length, lat=pts.reduce((a,p)=>a+p[1],0)/pts.length;
+    const folder=pm.parentElement?.querySelector(":scope > name")?.textContent.trim();
+    out.push({name,lat,lng,memo:[folder?"폴더: "+folder:"",desc].filter(Boolean).join(" · ")});
+  });
+  return out;
+}
+async function parseCSVFile(f){
+  const buf=await f.arrayBuffer(); let text=new TextDecoder("utf-8").decode(buf);
+  if(text.includes("�")) text=new TextDecoder("euc-kr").decode(buf);   // 엑셀 한글 CSV
+  const rows=parseCSV(text.replace(/^﻿/,"")).filter(r=>r.some(c=>c.trim()));
+  if(!rows.length) return [];
+  const H=rows[0].map(h=>h.trim().toLowerCase());
+  const col=(...names)=>H.findIndex(h=>names.some(n=>h.includes(n)));
+  const ci={name:col("현장","이름","name","명칭"),addr:col("주소","address","소재지"),lat:col("위도","lat"),lng:col("경도","lng","lon"),
+    cat:col("구분","category","종류"),st:col("단계","status","상태"),cap:col("용량","capacity","규모"),memo:col("메모","비고","memo")};
+  if(ci.name<0) ci.name=0;
+  return rows.slice(1).map(r=>({name:r[ci.name]?.trim(),address:ci.addr>=0?r[ci.addr]?.trim():"",
+    lat:ci.lat>=0?parseFloat(r[ci.lat]):NaN,lng:ci.lng>=0?parseFloat(r[ci.lng]):NaN,
+    category:ci.cat>=0?r[ci.cat]?.trim():"",status:ci.st>=0?r[ci.st]?.trim():"",capacity:ci.cap>=0?r[ci.cap]?.trim():"",memo:ci.memo>=0?r[ci.memo]?.trim():""}))
+    .filter(r=>r.name);
+}
+function parseCSV(t){
+  const out=[]; let row=[], cell="", q=false;
+  for(let i=0;i<t.length;i++){ const c=t[i];
+    if(q){ if(c==='"'){ if(t[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else if(c==='"') q=true; else if(c===","){row.push(cell);cell="";}
+    else if(c==="\n"||c==="\r"){ if(c==="\r"&&t[i+1]==="\n") i++; row.push(cell); out.push(row); row=[]; cell=""; }
+    else cell+=c; }
+  if(cell||row.length){row.push(cell);out.push(row);} return out;
+}
+async function mergeRecords(recs, src){
+  let added=0, failed=[];
+  const useKakao = await loadKakao();
+  for(let i=0;i<recs.length;i++){
+    const r=recs[i]; let lat=+r.lat, lng=+r.lng;
+    if((!isFinite(lat)||!isFinite(lng)) && r.address){
+      setStatus("#importStatus",`주소 검색 중 ${i+1}/${recs.length}…`);
+      const g=await geocode(r.address); if(g){lat=g.lat;lng=g.lng;}
+      if(!useKakao) await new Promise(ok=>setTimeout(ok,1100));   // OSM 검색 사용량 제한
+    }
+    if(!isFinite(lat)||!isFinite(lng)){ failed.push(r.name); continue; }
+    const dup = sites.find(s=>s.name===r.name && Math.abs(s.lat-lat)<1e-4 && Math.abs(s.lng-lng)<1e-4);
+    if(dup) continue;
+    sites.push({id:/^[\w-]+$/.test(r.id||"")?r.id:uid(),name:r.name,category:CATS[r.category]?r.category:"기타",status:STATUSES.includes(r.status)?r.status:"영업",
+      capacity:r.capacity||"",address:r.address||"",lat,lng,memo:r.memo||"",source:r.source||src}); added++;
+  }
+  refreshAll();
+  if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.1));
+  if(failed.length) setTimeout(()=>setStatus("#importStatus",`${added}개 가져옴. 위치를 못 찾은 ${failed.length}개: ${failed.slice(0,8).join(", ")}${failed.length>8?" 외":""}`,true),0);
+  return added;
+}
+
+/* ---------- 내보내기 ---------- */
+function download(name, text, type){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type}));
+  a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+}
+const stamp = () => new Date().toISOString().slice(0,10);
+$("#expJson").onclick=()=>download("sites.json", JSON.stringify(sites.filter(s=>!s.example),null,2),"application/json");
+$("#expCsv").onclick=()=>{
+  const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const lines=[["현장명","구분","단계","용량","주소","위도","경도","메모"].join(",")]
+    .concat(sites.map(s=>[s.name,s.category,s.status,s.capacity,s.address,s.lat,s.lng,s.memo].map(q).join(",")));
+  download(`현장목록_${stamp()}.csv`,"﻿"+lines.join("\r\n"),"text/csv");
+};
+$("#expKml").onclick=()=>{
+  const x=s=>esc(s);
+  const body=sites.map(s=>`<Placemark><name>${x(s.name)}</name><description>${x([s.category,s.status,s.capacity,s.address,s.memo].filter(Boolean).join(" / "))}</description><Point><coordinates>${s.lng},${s.lat},0</coordinates></Point></Placemark>`).join("\n");
+  download(`현장목록_${stamp()}.kml`,`<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>현장 전력지도</name>\n${body}\n</Document></kml>`,"application/vnd.google-earth.kml+xml");
+};
+
+/* ---------- 송전선로·변전소·발전소 (grid.json 우선, 없으면 Overpass = OpenInfraMap 원본 OSM) ---------- */
+function vClass(v){
+  const n = String(v||"").split(/[;,]/).map(x=>parseFloat(x)).filter(isFinite);
+  const kv = n.length ? Math.max(...n)/1000 : 0;
+  const g = kv>=700?"765":kv>=300?"345":kv>=140?"154":kv>0?"66":"unk";
+  return {kv, g, color:`var(--v${g==="unk"?"unk":g})`, w: kv>=700?4:kv>=300?3.2:kv>=140?2.4:1.6};
+}
+function cssColor(v){ return getComputedStyle(document.documentElement).getPropertyValue(v.slice(4,-1)).trim() || v; }
+async function overpass(q){
+  let lastErr;
+  for(let round=0; round<2; round++) for(const ep of OVERPASS){
+    try{ const r=await fetch(ep,{method:"POST",body:"data="+encodeURIComponent(q),headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+      if(r.ok){ const j=await r.json(); if(j.remark && /timed out|runtime error|out of memory/i.test(j.remark)) throw new Error("서버 시간 초과"); return j; }
+      lastErr=new Error("서버 응답 "+r.status);
+      if(r.status===429||r.status===504) await new Promise(ok=>setTimeout(ok,3000)); }catch(e){ lastErr=e; }
+  }
+  throw lastErr;
+}
+function ssFromEl(el){
+  let lat,lng;
+  if(el.type==="node"){lat=el.lat;lng=el.lon;}
+  else if(el.center){lat=el.center.lat;lng=el.center.lon;}
+  else if(el.geometry){lat=el.geometry.reduce((a,p)=>a+p.lat,0)/el.geometry.length; lng=el.geometry.reduce((a,p)=>a+p.lon,0)/el.geometry.length;}
+  else return null;
+  const t=el.tags||{};
+  return {id:el.type[0]+el.id,name:t["name:ko"]||t.name||"이름 없는 변전소",lat,lng,voltage:t.voltage||"",operator:t.operator||"",kind:t.substation||""};
+}
+function ssPopup(s){
+  const v=vClass(s.voltage);
+  return `<b>${esc(s.name)}</b><br>${v.kv? v.kv+" kV":"전압 미상"}${s.operator? " · "+esc(s.operator):""}${s.kind? " · "+esc(s.kind):""}
+   <div class="pop-actions"><button onclick="App.setEnd('from','ss:${s.id}')">출발로</button><button onclick="App.setEnd('to','ss:${s.id}')">도착으로</button></div>`;
+}
+function drawSub(s){
+  if(substations.has(s.id)) return;
+  substations.set(s.id,s);
+  L.circleMarker([s.lat,s.lng],{radius:dotR(),weight:1,color:"#1b1f24",fillColor:cssColor(vClass(s.voltage).color),fillOpacity:1})
+    .bindPopup(ssPopup(s)).bindTooltip(s.name).addTo(subLayer);
+}
+/* 전국 화면에서 점이 선로를 덮지 않도록 줌에 따라 크기를 바꾸고, 소규모 발전소는 확대했을 때만 표시 */
+const SMALL_PLANT_MW=20, SMALL_PLANT_ZOOM=10;
+const dotR=()=>{ const z=map.getZoom(); return z<8?2.5:z<10?3.5:z<12?4.5:5.5; };
+function syncDots(){
+  const r=dotR();
+  subLayer.eachLayer(l=>l.setRadius(r)); plantBig.eachLayer(l=>l.setRadius(r)); plantSmall.eachLayer(l=>l.setRadius(r-1));
+  if(map.getZoom()>=SMALL_PLANT_ZOOM) plantLayer.addLayer(plantSmall); else plantLayer.removeLayer(plantSmall);
+}
+map.on("zoomend",syncDots);
+function plantMW(out){
+  const m=String(out).match(/([\d.]+)\s*(GW|MW|kW)/i); if(!m) return 0;
+  return +m[1]*({gw:1000,mw:1,kw:.001}[m[2].toLowerCase()]);
+}
+const PLANT_SRC={solar:["태양광","#e8a400"],wind:["풍력","#12a4b6"],hydro:["수력","#1f6fb8"],nuclear:["원자력","#c2255c"],coal:["석탄","#495057"],gas:["가스","#e8590c"],oil:["석유","#7a4a21"],biomass:["바이오매스","#2f9e44"],biogas:["바이오가스","#2f9e44"],waste:["폐기물","#868e96"],tidal:["조력","#1f6fb8"],battery:["ESS","#0b6bcb"]};
+function drawPlant(p){
+  const src=PLANT_SRC[p.src.split(";")[0]]||["기타","#8a96a3"];
+  const big=plantMW(p.out)>=SMALL_PLANT_MW;
+  L.circleMarker([p.lat,p.lng],{radius:big?dotR():dotR()-1,weight:1,color:"#1b1f24",fillColor:src[1],fillOpacity:.95})
+    .bindPopup(`<b>${esc(p.name)}</b><br>${src[0]} 발전소${p.out? " · "+esc(p.out):""}${p.operator? " · "+esc(p.operator):""}`)
+    .bindTooltip(p.name).addTo(big?plantBig:plantSmall);
+}
+const drawn = new Set();
+function drawLine(l){
+  if(drawn.has(l.id)) return; drawn.add(l.id);
+  const v=vClass(l.v), pts=[]; for(let i=0;i<l.p.length;i+=2) pts.push([l.p[i],l.p[i+1]]);
+  L.polyline(pts,{color:cssColor(v.color),weight:l.m?1:v.w,opacity:l.m?.6:.9,dashArray:l.c?"6 4":null})
+    .bindTooltip(`${l.n||(l.m?"배전선로":"송전선로")} · ${v.kv? v.kv+" kV":"전압 미상"}${l.o?" · "+l.o:""}`,{sticky:true})
+    .addTo(l.m?minorLayer:voltLayers[v.g]);
+}
+function compact(els){
+  const lines=[], subs=[];
+  for(const el of els){
+    const t=el.tags||{};
+    if(t.power==="substation"){ const s=ssFromEl(el); if(s) subs.push(s); }
+    else if(el.geometry){
+      const p=[]; for(const g of el.geometry){ p.push(+g.lat.toFixed(5), +g.lon.toFixed(5)); }
+      lines.push({id:el.type[0]+el.id,v:t.voltage||"",n:t["name:ko"]||t.name||"",o:t.operator||"",c:t.power==="cable"?1:0,m:t.power==="minor_line"?1:0,p});
+    }
+  }
+  return {lines,subs};
+}
+
+/* 전력설비는 IndexedDB에 저장: grid.json 전체(grid:full) 또는 Overpass로 받은 칸(kr:위도,경도) */
+const IDB={db:null, mem:new Map(),
+  open(){ return new Promise(res=>{ try{ const r=indexedDB.open("gridsite",1);
+      r.onupgradeneeded=()=>r.result.createObjectStore("cells");
+      r.onsuccess=()=>{ this.db=r.result; res(); }; r.onerror=()=>res(); }catch(e){ res(); } }); },
+  get(k){ if(!this.db) return Promise.resolve(this.mem.get(k)); return new Promise(res=>{ try{ const q=this.db.transaction("cells").objectStore("cells").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>res(null);}catch(e){res(null);} }); },
+  set(k,v){ this.mem.set(k,v); if(!this.db) return; try{ this.db.transaction("cells","readwrite").objectStore("cells").put(v,k);}catch(e){} },
+  clear(){ this.mem.clear(); if(!this.db) return Promise.resolve(); return new Promise(res=>{ try{ const t=this.db.transaction("cells","readwrite"); t.objectStore("cells").clear(); t.oncomplete=res; t.onerror=res; }catch(e){res();} }); }
+};
+const GRID_KEY="grid:full";
+let gridBusy=false, gridDate=null;
+const fmtDate = iso => new Date(iso).toLocaleDateString("ko-KR");
+function clearGrid(){
+  Object.values(voltLayers).forEach(l=>l.clearLayers()); subLayer.clearLayers(); plantBig.clearLayers(); plantSmall.clearLayers(); minorLayer.clearLayers();
+  drawn.clear(); substations.clear(); minorDone.clear();
+}
+function showGrid(g){
+  clearGrid(); g.lines.forEach(drawLine); g.subs.forEach(drawSub); (g.plants||[]).forEach(drawPlant);
+  syncDots(); gridDate=g.generated; renderEndSelects();
+  setStatus("#infraStatus",`표시 중: 선로 ${g.lines.length}개 구간, 변전소 ${g.subs.length}곳, 발전소 ${(g.plants||[]).length}곳 (${fmtDate(g.generated)} 기준)`);
+}
+/* 저장본을 먼저 보여주고, grid-meta.json의 날짜가 더 새로울 때만 grid.json을 받음 */
+async function loadGrid(force){
+  if(gridBusy) return; gridBusy=true;
+  const stored=await IDB.get(GRID_KEY);
+  if(stored && stored.generated!==gridDate) showGrid(stored);
+  let failed=false;
+  if(!isOffline()) try{
+    const meta=await fetchJson("grid-meta.json");
+    if(force || !stored || new Date(meta.generated)>new Date(stored.generated)){
+      setStatus("#infraStatus",`전력설비 최신 데이터 받는 중… (${(meta.bytes/1e6).toFixed(1)} MB)`);
+      const g=await fetchJson("grid.json");
+      if(!Array.isArray(g.lines) || !g.lines.length) throw new Error("데이터가 비어 있습니다");
+      IDB.set(GRID_KEY,g); showGrid(g);
+    }
+  }catch(e){ failed=true; }
+  gridBusy=false;
+  if(gridDate){ if(failed) setStatus("#infraStatus",`저장된 데이터를 표시합니다 (${fmtDate(gridDate)} 기준). 새 데이터는 확인하지 못했습니다.`); return; }
+  if(isOffline()) return setStatus("#infraStatus","전력설비 데이터가 아직 이 기기에 없습니다. 인터넷에 연결된 곳에서 한 번 열어 주세요.",true);
+  loadCells(force);
+}
+
+/* grid.json을 못 받을 때만: 1도 x 1도 칸 36개로 나눠 Overpass에서 직접 받고 브라우저에 저장 */
+const CELLS=[]; for(let la=33; la<=38; la++) for(let lo=124; lo<=129; lo++) CELLS.push({la,lo,k:`kr:${la},${lo}`});
+const MAX_AGE=30*24*3600*1000;
+async function loadCells(force){
+  if(gridBusy) return; gridBusy=true;
+  const c=map.getCenter();
+  const todo=[];
+  let have=0;
+  for(const cell of CELLS){
+    const d=await IDB.get(cell.k);
+    if(d){ d.lines.forEach(drawLine); d.subs.forEach(drawSub); have++; }
+    if(!d || force || Date.now()-d.t>MAX_AGE) todo.push(cell);
+  }
+  renderEndSelects();
+  if(have) setStatus("#infraStatus",`저장된 전력설비 표시 중: 선로 ${drawn.size}개 구간, 변전소 ${substations.size}곳`);
+  todo.sort((a,b)=>Math.hypot(a.la+.5-c.lat,a.lo+.5-c.lng)-Math.hypot(b.la+.5-c.lat,b.lo+.5-c.lng));
+  for(let pass=0; pass<3 && todo.length; pass++){
+    const left=[];
+    for(let i=0;i<todo.length;i++){
+      const cell=todo[i];
+      setStatus("#infraStatus",`전국 송전망 받는 중… ${CELLS.length-todo.length+i+1}/${CELLS.length} 지역 (처음 한 번만 걸립니다)`);
+      const bb=`${cell.la},${cell.lo},${cell.la+1},${cell.lo+1}`;
+      const q=`[out:json][timeout:120];(way["power"="line"](${bb});way["power"="cable"]["voltage"](${bb}););out tags geom;nwr["power"="substation"](${bb});out center tags;`;
+      try{
+        const d=compact((await overpass(q)).elements||[]); d.t=Date.now();
+        IDB.set(cell.k,d); d.lines.forEach(drawLine); d.subs.forEach(drawSub);
+      }catch(e){ left.push(cell); }
+      await new Promise(ok=>setTimeout(ok,1200));
+    }
+    todo.length=0; todo.push(...left);
+    if(left.length) await new Promise(ok=>setTimeout(ok,10000));
+  }
+  renderEndSelects();
+  const msg=`표시 중: 선로 ${drawn.size}개 구간, 변전소 ${substations.size}곳`;
+  setStatus("#infraStatus", todo.length? `${msg} · ${todo.length}개 지역은 서버가 바빠 못 받았습니다. 설정 탭의 ‘전력설비 다시 받기’로 다시 시도하세요.` : msg, !!todo.length);
+  gridBusy=false;
+}
+
+/* 배전선로는 양이 많아 확대(줌 12 이상)했을 때 화면 범위만 받음 */
+const MT=0.1, minorDone=new Set(); let minorBusy=false, minorAgain=false, minorTimer;
+async function loadMinor(){
+  if(!$("#lvMinor").checked || map.getZoom()<12 || isOffline()) return;
+  if(minorBusy){ minorAgain=true; return; } minorBusy=true;
+  const b=map.getBounds();
+  for(let y=Math.floor(b.getSouth()/MT); y<=Math.floor(b.getNorth()/MT); y++)
+    for(let x=Math.floor(b.getWest()/MT); x<=Math.floor(b.getEast()/MT); x++){
+      const k=y+","+x; if(minorDone.has(k)) continue;
+      const bb=`${(y*MT).toFixed(2)},${(x*MT).toFixed(2)},${((y+1)*MT).toFixed(2)},${((x+1)*MT).toFixed(2)}`;
+      try{ compact((await overpass(`[out:json][timeout:60];way["power"="minor_line"](${bb});out tags geom;`)).elements||[]).lines.forEach(drawLine); minorDone.add(k); }catch(e){}
+    }
+  minorBusy=false; if(minorAgain){ minorAgain=false; loadMinor(); }
+}
+map.on("moveend",()=>{ clearTimeout(minorTimer); minorTimer=setTimeout(loadMinor,600); });
+
+/* 표시 항목 체크박스 */
+const TOGGLE_KEY="gridsite.toggles";
+let toggles={}; try{ toggles=JSON.parse(lsGet(TOGGLE_KEY)||"{}"); }catch(e){}
+function bindToggle(id, apply){
+  const el=$("#"+id); if(id in toggles) el.checked=toggles[id];
+  el.addEventListener("change",()=>{ toggles[id]=el.checked; lsSet(TOGGLE_KEY,JSON.stringify(toggles)); apply(el.checked); });
+  apply(el.checked);
+}
+for(const g of ["765","345","154","66","unk"]) bindToggle("lv"+g, on=> on?map.addLayer(voltLayers[g]):map.removeLayer(voltLayers[g]));
+bindToggle("lvSub", on=> on?map.addLayer(subLayer):map.removeLayer(subLayer));
+bindToggle("lvPlant", on=> on?map.addLayer(plantLayer):map.removeLayer(plantLayer));
+bindToggle("lvMinor", on=>{ on?map.addLayer(minorLayer):map.removeLayer(minorLayer); if(on){ loadMinor(); if(isOffline()) setStatus("#infraStatus","배전선로는 저장되지 않아 인터넷이 있을 때만 보입니다."); else if(map.getZoom()<12) setStatus("#infraStatus","배전선로는 동네 단위까지 확대하면 나타납니다."); } });
+for(const g of Object.keys(BASE_GROUPS)) bindToggle("tg-"+g, ()=>applyBaseGroups());
+$("#btnRegrid").onclick=()=>{
+  if(isOffline()) return setStatus("#wipeStatus","인터넷에 연결된 뒤 다시 눌러 주세요.",true);
+  setStatus("#wipeStatus","전력설비 데이터를 새로 받습니다. 현장 탭에서 진행 상황을 볼 수 있습니다."); loadGrid(true);
+};
+
+/* ---------- 경로 ---------- */
+function endpoint(v){
+  if(!v) return null; const [k,id]=v.split(/:(.+)/);
+  if(k==="site"){ const s=sites.find(x=>x.id===id); return s&&{name:s.name,lat:s.lat,lng:s.lng}; }
+  if(k==="ss"){ const s=substations.get(id); return s&&{name:s.name,lat:s.lat,lng:s.lng}; }
+  return null;
+}
+function renderEndSelects(){
+  const siteOpts=sites.slice().sort((a,b)=>a.name.localeCompare(b.name,"ko")).map(s=>`<option value="site:${s.id}">${esc(s.name)}</option>`).join("");
+  const ssOpts=[...substations.values()].sort((a,b)=>a.name.localeCompare(b.name,"ko")).map(s=>`<option value="ss:${s.id}">${esc(s.name)}${s.voltage?" ("+vClass(s.voltage).kv+"kV)":""}</option>`).join("");
+  for(const sel of [$("#rFrom"),$("#rTo")]){
+    const keep=sel.value;
+    sel.innerHTML=`<option value="">선택하세요</option><optgroup label="우리 현장">${siteOpts}</optgroup><optgroup label="변전소">${ssOpts}</optgroup>`;
+    sel.value=keep;
+  }
+  const keepN=$("#nearSite").value;
+  $("#nearSite").innerHTML=`<option value="">현장 선택</option>`+sites.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  $("#nearSite").value=keepN;
+  renderAreaOptions();
+}
+function setEnd(which, val){
+  showTab("route"); $(which==="from"?"#rFrom":"#rTo").value=val; map.closePopup();
+  if($("#rFrom").value && $("#rTo").value) findRoute();
+}
+$("#btnSwap").onclick=()=>{ const a=$("#rFrom").value; $("#rFrom").value=$("#rTo").value; $("#rTo").value=a; };
+$("#btnClearRoute").onclick=()=>{ routeLayer.clearLayers(); $("#routeList").hidden=true; $("#routeExtra").innerHTML=""; setStatus("#routeStatus",""); };
+$("#btnRoute").onclick=findRoute;
+let routeLines=[];
+async function findRoute(){
+  const a=endpoint($("#rFrom").value), b=endpoint($("#rTo").value);
+  if(!a||!b) return setStatus("#routeStatus","출발과 도착을 모두 고르세요.",true);
+  routeLayer.clearLayers(); routeLines=[]; setStatus("#routeStatus","경로 계산 중…");
+  const straight=haversine(a,b);
+  L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:cssColor("var(--fg)"),weight:1.5,dashArray:"4 6",opacity:.7}).addTo(routeLayer);
+  try{
+    if(isOffline()) throw new Error("오프라인");
+    const u=`https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?alternatives=3&overview=full&geometries=geojson`;
+    const j=await fetch(u).then(r=>r.json());
+    if(j.code!=="Ok"||!j.routes.length) throw new Error(j.message||"경로 없음");
+    j.routes.slice(0,3).reverse().forEach((r,ri)=>{
+      const i=Math.min(j.routes.length,3)-1-ri;
+      const pl=L.polyline(r.geometry.coordinates.map(c=>[c[1],c[0]]),{color:ROUTE_COLORS[i],weight:i===0?6:4,opacity:i===0?.9:.7}).addTo(routeLayer);
+      routeLines[i]=pl;
+    });
+    $("#routeList").innerHTML=j.routes.slice(0,3).map((r,i)=>`
+      <div class="route" data-i="${i}"><span class="sw" style="background:${ROUTE_COLORS[i]}"></span>
+        <div><b>경로 ${i+1}</b>${i===0?' <span class="chip">추천</span>':""}<div class="hint">${esc(a.name)} → ${esc(b.name)}</div></div>
+        <div class="num" style="text-align:right">${km(r.distance/1000)}<br><span class="hint">${mins(r.duration)}</span></div></div>`).join("");
+    $("#routeList").hidden=false;
+    setStatus("#routeStatus",`도로 경로 ${Math.min(j.routes.length,3)}개를 찾았습니다.`);
+  }catch(e){ $("#routeList").hidden=true; setStatus("#routeStatus","도로 경로를 받지 못했습니다 ("+e.message+"). 직선거리만 표시합니다.",true); }
+  const kakaoUrl=`https://map.kakao.com/link/by/car/${encodeURIComponent(a.name)},${a.lat},${a.lng}/${encodeURIComponent(b.name)},${b.lat},${b.lng}`;
+  $("#routeExtra").innerHTML=`<div class="card"><div>직선거리 <b class="num">${km(straight)}</b> <span class="hint">(점선, 선로 길이 가늠용)</span></div>
+    <div class="row"><a class="btn" href="${kakaoUrl}" target="_blank" rel="noopener">카카오맵 길찾기</a>
+    <a class="btn" href="https://www.google.com/maps/dir/?api=1&origin=${a.lat},${a.lng}&destination=${b.lat},${b.lng}" target="_blank" rel="noopener">구글 지도</a></div></div>`;
+  map.fitBounds(routeLayer.getLayers().reduce((bb,l)=>bb.extend(l.getBounds()),L.latLngBounds([[a.lat,a.lng],[b.lat,b.lng]])).pad(0.15));
+}
+$("#routeList").addEventListener("click",e=>{
+  const r=e.target.closest(".route"); if(!r) return; const i=+r.dataset.i;
+  routeLines.forEach((pl,k)=>pl&&pl.setStyle({weight:k===i?7:3,opacity:k===i?.95:.45}));
+  routeLines[i]?.bringToFront(); map.fitBounds(routeLines[i].getBounds().pad(0.15));
+});
+
+/* 주변 변전소 */
+function near(id){
+  showTab("route"); $("#nearSite").value=id; map.closePopup(); findNear();
+}
+$("#btnNear").onclick=findNear;
+function findNear(){
+  const s=sites.find(x=>x.id===$("#nearSite").value); if(!s) return;
+  const R=+$("#nearR").value/1000; $("#nearList").hidden=false;
+  const list=[...substations.values()].map(x=>({...x,d:haversine(s,x)})).filter(x=>x.d<=R).sort((a,b)=>a.d-b.d);
+  $("#nearList").innerHTML = list.length ? list.slice(0,15).map(x=>{ const v=vClass(x.voltage); return `
+    <div class="item" data-ss="${x.id}"><span class="dot" style="background:${cssColor(v.color)};border-radius:2px"></span>
+      <div style="min-width:0"><div class="nm">${esc(x.name)}</div><div class="sub">${v.kv?v.kv+" kV":"전압 미상"}${x.operator?" · "+esc(x.operator):""}</div></div>
+      <div class="meta">${km(x.d)}<br><button class="btn small" data-route="${x.id}">경로</button></div></div>`; }).join("")
+    : `<div class="item" style="grid-template-columns:1fr"><span class="sub">${substations.size? "반경 안에 등록된 변전소가 없습니다. 반경을 넓혀 보세요." : "전력설비 데이터가 아직 없습니다. 인터넷에 연결된 곳에서 한 번 열어 주세요."}</span></div>`;
+  setStatus("#nearNote",list.length?`${R}km 안 ${list.length}곳${list.length>15?" 중 가까운 15곳":""}${gridDate?` · ${fmtDate(gridDate)} 기준 저장 데이터`:""}`:"");
+  if(list.length) map.fitBounds(L.latLngBounds([[s.lat,s.lng],...list.slice(0,5).map(x=>[x.lat,x.lng])]).pad(0.2));
+}
+$("#nearList").addEventListener("click",e=>{
+  const rb=e.target.closest("[data-route]");
+  if(rb){ e.stopPropagation(); $("#rFrom").value="site:"+$("#nearSite").value; $("#rTo").value="ss:"+rb.dataset.route; findRoute(); return; }
+  const it=e.target.closest("[data-ss]"); if(it){ const s=substations.get(it.dataset.ss); map.setView([s.lat,s.lng],14); }
+});
+
+/* ---------- 오프라인 지도 ----------
+   타일을 Cache Storage(TILE_CACHE)에 넣으면 sw.js가 먼저 찾아 응답한다.
+   OpenFreeMap 타일 주소의 날짜 부분은 매주 바뀌므로 저장 키에서는 "_"로 고정한다. */
+const TILE_CACHE="pm-tiles-saved", REGIONS_KEY="gridsite.regions", MAX_TILES=30000, DL_WORKERS=6;
+const NE2_URL=OFM+"/natural_earth/ne2sr/{z}/{x}/{y}.png", NE2_MAXZ=6, VEC_KEY=OFM+"/planet/_/{z}/{x}/{y}.pbf";
+const AVG_VEC=40e3, AVG_RASTER=120e3;   // 예상 용량 계산용 타일 평균 크기(바이트, 충주 실측 기준)
+const GLYPH_RANGES=["0-255","256-511","8192-8447","12288-12543","65280-65535"];   // 한글은 기기 글꼴로 그림
+const AREAS={"수도권":[36.89,126.30,38.30,127.85],"강원":[37.00,127.05,38.62,129.40],"충청":[35.95,125.95,37.25,128.25],
+  "전북":[35.30,126.35,36.15,127.90],"광주·전남":[33.85,125.95,35.50,127.90],"대구·경북":[35.55,127.80,37.20,129.60],
+  "부산·울산·경남":[34.60,127.55,35.95,129.50],"제주":[33.10,126.10,33.60,127.00]};
+let regions=[]; try{ regions=JSON.parse(lsGet(REGIONS_KEY)||"[]"); }catch(e){}
+let dlAbort=null;
+const saveRegions=()=>lsSet(REGIONS_KEY,JSON.stringify(regions));
+const mb=b=>b>=1e9?(b/1e9).toFixed(1)+" GB":(b/1e6).toFixed(b<1e7?1:0)+" MB";
+const tileX=(lng,z)=>Math.floor((lng+180)/360*2**z);
+const tileY=(lat,z)=>{ const r=lat*Math.PI/180; return Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*2**z); };
+function coverTiles(b,z,tpl,out){
+  const [s,w,n,e]=b;
+  for(let x=tileX(w,z); x<=tileX(e,z); x++) for(let y=tileY(n,z); y<=tileY(s,z); y++)
+    out.push(tpl.replace("{z}",z).replace("{x}",x).replace("{y}",y));
+}
+/* 목록을 만들지 않고 개수만 계산 (세계 전체 화면에서도 멈추지 않도록) */
+function countTiles(b,fromZ,toZ){
+  const [s,w,n,e]=b; let c=0;
+  for(let z=fromZ;z<=toZ;z++) c+=(tileX(e,z)-tileX(w,z)+1)*(tileY(s,z)-tileY(n,z)+1);
+  return c;
+}
+function tileCounts(b,maxZ){
+  const vec=countTiles(b,0,maxZ), raster=countTiles(b,0,Math.min(NE2_MAXZ,maxZ))+countTiles(b,5,Math.min(DEM_MAXZ,maxZ));
+  return {vec,raster,all:vec+raster};
+}
+function tileKeys(b,maxZ){
+  const vec=[], raster=[];
+  for(let z=0;z<=maxZ;z++) coverTiles(b,z,VEC_KEY,vec);
+  for(let z=0;z<=Math.min(NE2_MAXZ,maxZ);z++) coverTiles(b,z,NE2_URL,raster);
+  for(let z=5;z<=Math.min(DEM_MAXZ,maxZ);z++) coverTiles(b,z,DEM_URL,raster);
+  return {vec,raster,all:vec.concat(raster)};
+}
+function renderAreaOptions(){
+  const sel=$("#dlArea"), keep=sel.value;
+  sel.innerHTML=`<option value="view">지금 보이는 지도 화면</option><optgroup label="권역">${Object.keys(AREAS).map(k=>`<option value="area:${k}">${k}</option>`).join("")}</optgroup>`+
+    (sites.length?`<optgroup label="현장 주변">${sites.map(s=>`<option value="site:${s.id}">${esc(s.name)}</option>`).join("")}</optgroup>`:"");
+  sel.value=keep; if(!sel.value) sel.value="view";
+  updateEstimate();
+}
+function pickArea(){
+  const v=$("#dlArea").value;
+  if(v.startsWith("area:")) return {name:v.slice(5),b:AREAS[v.slice(5)]};
+  if(v.startsWith("site:")){
+    const s=sites.find(x=>x.id===v.slice(5)); if(!s) return null;
+    const r=+$("#dlRadius").value, dLat=r/111, dLng=r/(111*Math.cos(s.lat*Math.PI/180));
+    return {name:`${s.name} 주변 ${r}km`,b:[s.lat-dLat,s.lng-dLng,s.lat+dLat,s.lng+dLng]};
+  }
+  const m=map.getBounds();
+  const clamp=(v,lim)=>+Math.max(-lim,Math.min(lim,v)).toFixed(4);
+  return {name:"지도 화면 "+new Date().toLocaleDateString("ko-KR"),b:[clamp(m.getSouth(),85),clamp(m.getWest(),179.9),clamp(m.getNorth(),85),clamp(m.getEast(),179.9)]};
+}
+function updateEstimate(){
+  $("#dlRadiusWrap").hidden=!$("#dlArea").value.startsWith("site:");
+  const a=pickArea(); if(!a) return;
+  const t=tileCounts(a.b,+$("#dlZoom").value), n=t.all;
+  setStatus("#dlEstimate",n>MAX_TILES?`타일 ${n.toLocaleString()}개로 너무 많습니다. 지역을 줄이거나 상세도를 낮춰 주세요.`:`타일 ${n.toLocaleString()}개, 약 ${mb(t.vec*AVG_VEC+t.raster*AVG_RASTER)}`,n>MAX_TILES);
+}
+["#dlArea","#dlRadius","#dlZoom"].forEach(s=>$(s).addEventListener("input",updateEstimate));
+map.on("moveend",()=>{ if($("#dlArea").value==="view") updateEstimate(); });
+
+/* 스타일·스프라이트·영문 글꼴: sw.js가 요청을 지나가며 pm-map-core에 저장 */
+async function saveCore(){
+  const style=await fetchJson(STYLE_URL), tj=await fetchJson(TILEJSON_URL);
+  const urls=[STYLE_URL,TILEJSON_URL];
+  for(const s of ["","@2x"]) for(const e of [".json",".png"]) urls.push(style.sprite+s+e);
+  const stacks=new Set();
+  for(const l of style.layers){ const f=l.layout&&l.layout["text-font"]; if(Array.isArray(f)&&f.every(x=>typeof x==="string")) stacks.add(f.join(",")); }
+  for(const f of stacks) for(const r of GLYPH_RANGES) urls.push(style.glyphs.replace("{fontstack}",f).replace("{range}",r));
+  await Promise.all(urls.map(u=>fetch(u).catch(()=>null)));
+  return tj.tiles[0].match(/\/planet\/([^/]+)\//)[1];
+}
+async function runRegion(r,refresh){
+  const keys=tileKeys(r.b,r.z).all, ctl=dlAbort=new AbortController();
+  const cache=await caches.open(TILE_CACHE);
+  $("#btnDl").disabled=true; $("#btnDlCancel").hidden=false;
+  const bar=$("#dlProgress"); bar.hidden=false; bar.max=keys.length; bar.value=0;
+  setStatus("#dlStatus","준비 중…");
+  let done=0, failed=0, bytes=0, next=0;
+  try{
+    await navigator.serviceWorker.ready;
+    if(!navigator.serviceWorker.controller) await new Promise(ok=>{ navigator.serviceWorker.addEventListener("controllerchange",ok,{once:true}); setTimeout(ok,3000); });
+    const ver=await saveCore();
+    const worker=async()=>{
+      while(next<keys.length && !ctl.signal.aborted){
+        const key=keys[next++];
+        try{
+          let hit=refresh?null:await cache.match(key);
+          if(hit) bytes+=(await hit.clone().blob()).size;
+          else{
+            const res=await fetch(key.replace("/planet/_/",`/planet/${ver}/`),{signal:ctl.signal,cache:"no-store"});
+            if(res.ok && res.status!==204){ bytes+=(await res.clone().blob()).size; await cache.put(key,res); }
+            else if(res.status>=500||res.status===429) failed++;   // 404는 바다처럼 타일이 없는 곳
+          }
+        }catch(e){ if(!ctl.signal.aborted) failed++; }
+        bar.value=++done;
+        if(done%20===0) setStatus("#dlStatus",`저장 중… ${done.toLocaleString()} / ${keys.length.toLocaleString()} (${mb(bytes)})`);
+      }
+    };
+    await Promise.all(Array.from({length:DL_WORKERS},worker));
+    r.bytes=bytes; r.date=new Date().toISOString(); r.partial=ctl.signal.aborted||failed>0;
+    setStatus("#dlStatus",ctl.signal.aborted?"중지했습니다. 저장한 지역 목록에서 이어받을 수 있습니다.":failed?`${failed}개 타일을 받지 못했습니다. ‘이어받기’로 다시 시도하세요.`:`저장했습니다: ${r.name} (${mb(bytes)})`,r.partial&&!ctl.signal.aborted);
+  }catch(e){ r.partial=true; setStatus("#dlStatus","저장하지 못했습니다: "+e.message,true); }
+  saveRegions(); dlAbort=null; bar.hidden=true; $("#btnDl").disabled=false; $("#btnDlCancel").hidden=true;
+  renderRegions();
+}
+$("#btnDl").onclick=async()=>{
+  if(isOffline()) return setStatus("#dlStatus","지도 저장은 인터넷이 필요합니다.",true);
+  if(!("caches" in window) || !navigator.serviceWorker) return setStatus("#dlStatus","이 브라우저는 오프라인 지도를 지원하지 않습니다.",true);
+  const a=pickArea(), z=+$("#dlZoom").value; if(!a) return;
+  if(tileCounts(a.b,z).all>MAX_TILES) return;
+  navigator.storage?.persist?.();
+  const r={id:uid(),name:$("#dlName").value.trim()||a.name,b:a.b,z,bytes:0,date:new Date().toISOString(),partial:true};
+  regions.push(r); saveRegions(); renderRegions(); $("#dlName").value="";
+  await runRegion(r,false);
+};
+$("#btnDlCancel").onclick=()=>dlAbort?.abort();
+async function deleteRegion(id){
+  const r=regions.find(x=>x.id===id); if(!r||dlAbort) return;
+  regions=regions.filter(x=>x!==r); saveRegions();
+  const keep=new Set(regions.flatMap(x=>tileKeys(x.b,x.z).all)), cache=await caches.open(TILE_CACHE);
+  await Promise.all(tileKeys(r.b,r.z).all.filter(k=>!keep.has(k)).map(k=>cache.delete(k)));
+  setStatus("#dlStatus",`삭제했습니다: ${r.name}`); renderRegions();
+}
+async function renderRegions(){
+  $("#dlList").innerHTML=regions.length?regions.map(r=>`
+    <div class="region" data-id="${r.id}"><div style="min-width:0"><div class="nm" style="font-weight:600">${esc(r.name)}</div>
+      <div class="hint">${r.partial?"일부만 저장됨 · ":""}${mb(r.bytes)} · ${fmtDate(r.date)}</div></div>
+      <div class="acts"><button class="btn small" data-act="go">보기</button><button class="btn small" data-act="get">${r.partial?"이어받기":"새로 받기"}</button><button class="btn small" data-act="del">삭제</button></div></div>`).join("")
+    :`<div class="item" style="cursor:default;grid-template-columns:1fr"><span class="sub">아직 저장한 지역이 없습니다.</span></div>`;
+  const est=await navigator.storage?.estimate?.();
+  if(est) $("#dlUsage").textContent=`이 기기 저장 공간 사용량 ${mb(est.usage)} / 쓸 수 있는 공간 ${mb(est.quota)}`;
+}
+$("#dlList").addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]"); if(!b) return;
+  const r=regions.find(x=>x.id===b.closest(".region").dataset.id); if(!r) return;
+  if(b.dataset.act==="go") return map.fitBounds([[r.b[0],r.b[1]],[r.b[2],r.b[3]]]);
+  if(b.dataset.act==="del") return deleteRegion(r.id);
+  if(dlAbort) return;
+  if(isOffline()) return setStatus("#dlStatus","지도 저장은 인터넷이 필요합니다.",true);
+  runRegion(r,!r.partial);
+});
+
+/* ---------- PWA ---------- */
+let installEvt=null;
+addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); installEvt=e; $("#btnInstall").hidden=false; });
+addEventListener("appinstalled",()=>{ installEvt=null; $("#btnInstall").hidden=true; });
+$("#btnInstall").onclick=async()=>{ if(!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt=null; $("#btnInstall").hidden=true; };
+if("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(e=>console.warn("서비스 워커 등록 실패",e));
+function netUI(){ $("#netChip").hidden=!isOffline(); }
+addEventListener("offline",netUI);
+addEventListener("online",()=>{ netUI(); loadGrid(); });
+netUI();
+
+/* ---------- 탭·모바일·설정 ---------- */
+function showTab(t){
+  document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));
+  document.querySelectorAll(".view").forEach(v=>v.hidden=v.dataset.view!==t);
+  $("#panel").classList.remove("collapsed");
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+const isMobile=()=>matchMedia("(max-width: 760px)").matches;
+$("#panelHead").onclick=e=>{ if(isMobile()){ $("#panel").classList.toggle("collapsed"); } };
+$("#baseSel").value=baseKey; $("#baseNote").hidden = baseKey==="vector";
+$("#baseSel").onchange=()=>{ tileErrors=0; setBase($("#baseSel").value); lsSet("gridsite.base",baseKey); };
+$("#kakaoKey").value=lsGet("gridsite.kakaoKey")||"";
+$("#btnKey").onclick=()=>{ lsSet("gridsite.kakaoKey",$("#kakaoKey").value.trim()); kakaoReady=null; $("#btnKey").textContent="저장됨"; setTimeout(()=>$("#btnKey").textContent="키 저장",1500); };
+let wipeArmed=false;
+$("#btnWipe").onclick=()=>{
+  if(!wipeArmed){ wipeArmed=true; setStatus("#wipeStatus","한 번 더 누르면 이 기기의 현장이 모두 지워집니다. 먼저 JSON으로 내보내 두세요.",true); setTimeout(()=>wipeArmed=false,4000); return; }
+  sites=[]; refreshAll(); wipeArmed=false; setStatus("#wipeStatus","지웠습니다.");
+};
+
+/* ---------- 시작 ---------- */
+window.App={setEnd,near,edit};
+(async function init(){
+  let saved=null; try{ saved=JSON.parse(lsGet(STORE)||"null"); }catch(e){}
+  if(Array.isArray(saved)) sites=saved;
+  else{
+    sites=[
+      {id:"ex1",name:"(예시) 충주 태양광+ESS",category:"태양광+ESS",status:"설계",capacity:"PV 1MW / ESS 2MWh",address:"충청북도 충주시",lat:36.991,lng:127.926,memo:"예시 데이터입니다. 지워도 됩니다.",example:true},
+      {id:"ex2",name:"(예시) 남동공단 데이터센터",category:"데이터센터",status:"영업",capacity:"수전 154kV",address:"인천 남동구 남동국가산업단지",lat:37.402,lng:126.700,memo:"예시 데이터입니다.",example:true}
+    ];
+    save();
+  }
+  renderMarkers(); renderList(); clearForm();
+  if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.3),{maxZoom:11});
+  if(isMobile()) $("#panel").classList.add("collapsed");
+  renderRegions();
+  if(matchMedia("(display-mode: standalone)").matches) navigator.storage?.persist?.();
+  await IDB.open(); loadGrid();
+})();
+</script>
+</body>
+</html>

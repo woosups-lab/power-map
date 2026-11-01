@@ -1,0 +1,11 @@
+# 회사 현장 데이터는 공개 저장소에 올리지 않습니다
+sites.json
+sites*.json
+현장목록*
+*.kml
+*.kmz
+*.csv
+*.xlsx
+
+node_modules/
+.claude/
