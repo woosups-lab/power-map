@@ -830,11 +830,17 @@ function plantMW(out){
   return +m[1]*({gw:1000,mw:1,kw:.001}[m[2].toLowerCase()]);
 }
 const PLANT_SRC={solar:["태양광","#e8a400"],wind:["풍력","#12a4b6"],hydro:["수력","#1f6fb8"],nuclear:["원자력","#c2255c"],coal:["석탄","#495057"],gas:["가스","#e8590c"],oil:["석유","#7a4a21"],biomass:["바이오매스","#2f9e44"],biogas:["바이오가스","#2f9e44"],waste:["폐기물","#868e96"],tidal:["조력","#1f6fb8"],battery:["ESS","#0b6bcb"]};
+/* 발전소는 네모로 그려 원으로 표시되는 변전소와 구분 (지도는 preferCanvas라 캔버스에 직접 그림) */
+const SquareMarker=L.CircleMarker.extend({_updatePath(){
+  const R=this._renderer; if(!R._drawing||this._empty()) return;
+  const p=this._point, r=Math.max(this._radius,1), c=R._ctx;
+  c.beginPath(); c.rect(p.x-r,p.y-r,2*r,2*r); R._fillStroke(c,this);
+}});
 function drawPlant(p){
   const src=PLANT_SRC[p.src.split(";")[0]]||["기타","#8a96a3"];
   const big=plantMW(p.out)>=SMALL_PLANT_MW;
-  L.circleMarker([p.lat,p.lng],{radius:big?dotR():dotR()-1,weight:1,color:"#1b1f24",fillColor:src[1],fillOpacity:.95})
-    .bindPopup(`<b>${esc(p.name)}</b><br>${src[0]} 발전소${p.out? " · "+esc(p.out):""}${p.operator? " · "+esc(p.operator):""}`)
+  new SquareMarker([p.lat,p.lng],{radius:big?dotR():dotR()-1,weight:1,color:"#1b1f24",fillColor:src[1],fillOpacity:.95})
+    .bindPopup(`<b>${esc(p.name)}</b><br>${src[0]} 발전소${plantMW(p.out)? " · "+esc(p.out):""}${p.operator? " · "+esc(p.operator):""}`)
     .bindTooltip(p.name).addTo(big?plantBig:plantSmall);
 }
 const drawn = new Set();
