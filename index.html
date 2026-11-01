@@ -1164,7 +1164,7 @@ $("#photoClose").onclick=()=>{ URL.revokeObjectURL($("#photoImg").src); $("#phot
 /* ---------- 입장: 비밀번호 ----------
    서버가 없으므로 공개 파일 access.json의 해시와 비교한다. 화면을 나누는 장치이며,
    실제 보호는 현장 데이터가 각 기기에만 있고 저장소에 올라가지 않는다는 데서 나온다. */
-const AUTH_KEY="gridsite.auth", GH_TOKEN_KEY="gridsite.ghToken", MIN_PW=8;
+const AUTH_KEY="gridsite.auth", GH_TOKEN_KEY="gridsite.ghToken", MIN_PW=4;
 const ACCESS_API="https://api.github.com/repos/woosups-lab/power-map/contents/access.json";
 let access=null, started=false, gateMode="login";
 const ssGet=k=>{ try{ return sessionStorage.getItem(k); }catch(e){ return null; } };
