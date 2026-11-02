@@ -1153,7 +1153,7 @@ async function addressAt(lat,lng){
   return reverseGeocode(lat,lng);
 }
 function pinPopup(p){
-  return `<b>${esc(p.title||"선택한 지점")}</b>${p.address? `<br>${esc(p.address)}`:""}
+  return `<b>${esc(p.title||"선택한 지점")}</b>${p.address&&p.address!==p.title? `<br>${esc(p.address)}`:""}
    <br><span style="font-family:monospace;font-size:11px">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</span>
    ${isAdmin()?`<div class="pop-actions"><button onclick="App.pinToSite()">현장으로 등록</button></div>`:""}`;
 }
