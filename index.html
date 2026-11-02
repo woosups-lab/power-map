@@ -1107,8 +1107,9 @@ async function vwSearch(q,type,category,kind){
   const j=await jsonp(`${VW_SEARCH}?${vwParams({service:"search",request:"search",version:"2.0",crs:"EPSG:4326",size:"7",query:q,type,...(category?{category}:{})})}`);
   if(j?.response?.status!=="OK") return [];
   return j.response.result.items.map(i=>{
-    const a=i.address||{}, addr=a.road||a.parcel||"";
-    return {title:type==="ADDRESS"?addr:(i.title||addr),sub:type==="ADDRESS"?(a.bldnm||""):addr,kind,lat:+i.point.y,lng:+i.point.x,place:type==="PLACE"};
+    const a=i.address||{}, tidy=s=>(s||"").replace(/-0$/,"").replace(/(\d)[가-힣]$/,"$1");   // "21-0", "700대" 정리
+    const addr=tidy(category==="PARCEL"?a.parcel:(a.road||a.parcel));
+    return {title:type==="ADDRESS"?addr:(i.title||addr),sub:type==="ADDRESS"?[a.bldnm,category==="PARCEL"?a.road:a.parcel].filter(Boolean).join(" · "):addr,kind,lat:+i.point.y,lng:+i.point.x,place:type==="PLACE"};
   });
 }
 async function kakaoSearch(q){
