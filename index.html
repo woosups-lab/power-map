@@ -1216,15 +1216,15 @@ map.on("click",e=>{ if(!pinPicking) return; pinPicking=false; map.getContainer()
 /* ---------- 지적도·지적편집도 (브이월드 WMS) ---------- */
 const VW_WMS="https://api.vworld.kr/req/wms";
 const PARCEL_DEFS={
-  lvCadastre:{layers:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",styles:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",minZoom:16,zIndex:10,opacity:.75,px:1024,name:"지적도"},   // 기본 스타일에 지번이 표시됨. 서버는 일정 축척 이상에서만 그려서 2배 해상도로 요청
-  lvZoning:{layers:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",styles:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",minZoom:12,zIndex:9,opacity:.55,px:512,name:"지적편집도"}
+  lvCadastre:{layers:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",styles:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",fromZoom:16,zIndex:10,opacity:.75,px:1024,name:"지적도"},   // 기본 스타일에 지번이 표시됨. 서버는 일정 축척 이상에서만 그려서 2배 해상도로 요청
+  lvZoning:{layers:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",styles:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",fromZoom:12,zIndex:9,opacity:.55,px:512,name:"지적편집도"}
 };
 const parcelLayers={};
 function parcelLayer(id){
   if(parcelLayers[id]) return parcelLayers[id];
   const d=PARCEL_DEFS[id];
   const l=L.tileLayer.wms(VW_WMS,{layers:d.layers,styles:d.styles,format:"image/png",transparent:true,version:"1.3.0",crs:L.CRS.EPSG3857,key:vwKey(),domain:location.origin,
-    tileSize:512,minZoom:d.minZoom,maxZoom:19,zIndex:d.zIndex,opacity:d.opacity,attribution:"지적: 브이월드(국토교통부)"});
+    tileSize:512,maxZoom:22,zIndex:d.zIndex,opacity:d.opacity,attribution:"지적: 브이월드(국토교통부)"});
   l.wmsParams.width=l.wmsParams.height=d.px;
   l.on("tileerror",()=>setStatus("#parcelNote",`${d.name}를 불러오지 못했습니다. 인증키나 인터넷 연결을 확인해 주세요.`,true));
   return parcelLayers[id]=l;
@@ -1234,11 +1234,11 @@ function applyParcel(){
   const on=Object.keys(PARCEL_DEFS).filter(id=>$("#"+id).checked);
   let note="";
   for(const id of Object.keys(PARCEL_DEFS)){
-    const want=on.includes(id) && vwKey();
+    const want=on.includes(id) && vwKey() && map.getZoom()>=PARCEL_DEFS[id].fromZoom;   // 레이어의 minZoom 옵션은 지도 축소까지 막으므로 직접 켜고 끔
     if(want) map.addLayer(parcelLayer(id)); else if(parcelLayers[id]) map.removeLayer(parcelLayers[id]);
   }
   if(on.length){
-    const z=Math.min(...on.map(id=>PARCEL_DEFS[id].minZoom));
+    const z=Math.min(...on.map(id=>PARCEL_DEFS[id].fromZoom));
     note=!vwKey()?"지적도를 보려면 브이월드 인증키 설정이 필요합니다.":isOffline()?"지적도는 인터넷이 있을 때만 보입니다.":map.getZoom()<z?"지적 정보는 더 확대하면 나타납니다.":"";
   }
   setStatus("#parcelNote",note,!vwKey()&&on.length>0);
