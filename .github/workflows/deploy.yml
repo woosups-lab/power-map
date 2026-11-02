@@ -51,9 +51,13 @@ jobs:
         with:
           ref: main
       - name: 공개할 파일만 모으기
+        env:
+          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
         run: |
           mkdir _site
-          cp -r index.html sw.js manifest.webmanifest access.json config.json grid.json grid-meta.json icons vendor _site/
+          cp -r index.html sw.js manifest.webmanifest access.json grid.json grid-meta.json icons vendor _site/
+          # 지도 서비스 키는 저장소에 두지 않고 배포할 때만 넣음
+          jq --arg k "$VWORLD_KEY" '.vworldKey=$k' config.json > _site/config.json
           # 앱 파일이 바뀔 때만 서비스 워커 버전이 바뀌도록 해시를 넣음
           BUILD=$(cat index.html manifest.webmanifest sw.js $(find icons vendor -type f | sort) | sha256sum | cut -c1-12)
           sed -i "s/__BUILD__/$BUILD/" _site/sw.js
