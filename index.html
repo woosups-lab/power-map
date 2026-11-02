@@ -92,6 +92,12 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
 .acts{display:flex;gap:4px;flex-wrap:wrap}
 .pop-stage{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px}
 .pop-stage select{padding:3px 6px;font-size:12px;width:auto;flex:1}
+.map-search{width:min(340px,calc(100vw - 76px));display:flex;flex-direction:column;gap:6px;background:none}
+.map-search form{display:flex;gap:6px}
+.map-search form input{flex:1;min-width:0;background:var(--panel);box-shadow:0 1px 5px rgba(0,0,0,.3)}
+.map-search .btn.small{background:var(--panel);box-shadow:0 1px 5px rgba(0,0,0,.3)}
+.map-search .acts{justify-content:flex-end}
+.map-search .list{max-height:48vh;overflow:auto;box-shadow:0 1px 5px rgba(0,0,0,.3);color:var(--fg);font:13px/1.4 var(--font);background:var(--panel)}
 #photoView{position:fixed;inset:0;z-index:2500;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px}
 #photoView img{max-width:100%;max-height:100%;object-fit:contain}
 #photoView button{position:absolute;top:12px;right:12px}
@@ -167,6 +173,12 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
       <label><input type="checkbox" id="lvMinor"><i style="background:var(--v66);height:2px;opacity:.6"></i>배전선로</label>
     </div>
     <p class="status" id="infraStatus"></p>
+    <h2>지적</h2>
+    <div class="legend toggles">
+      <label><input type="checkbox" id="lvCadastre">지적도 (필지 경계)</label>
+      <label><input type="checkbox" id="lvZoning">지적편집도 (용도지역)</label>
+    </div>
+    <p class="status" id="parcelNote"></p>
     <h2>지형 정보</h2>
     <div class="legend toggles">
       <label><input type="checkbox" id="tg-road" checked>도로</label>
@@ -323,7 +335,7 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
     <label class="f">카카오 JavaScript 키 (선택)
       <input type="text" id="kakaoKey" placeholder="developers.kakao.com 에서 발급"></label>
     <button class="btn" id="btnKey">키 저장</button>
-    <p class="hint">키가 없으면 OpenStreetMap 주소 검색을 씁니다. 한국 지번 주소는 잘 못 찾는 경우가 많아, 카카오 키를 넣는 것을 권합니다. 키를 발급할 때 이 프로그램을 여는 사이트 주소(예: GitHub Pages 주소)를 플랫폼 도메인에 등록해야 합니다.</p>
+    <p class="hint">사이트 공통 키가 설정되어 있으면 비워 두어도 됩니다. 여기에 넣은 키는 이 기기에서만 쓰입니다. 키를 발급할 때 사이트 주소를 JavaScript SDK 도메인에 등록해야 합니다.</p>
     <h2>배경 지도</h2>
     <select id="baseSel"><option value="vector">항목 선택 지도 (도로·하천·산·건물 켜고 끄기)</option><option value="esri">일반 지도 (Esri)</option><option value="sat">위성 사진</option><option value="osm">OpenStreetMap (웹에 올렸을 때만)</option></select>
     <h2>데이터</h2>
@@ -362,6 +374,7 @@ const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.pr
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+let cfg = null;   // config.json: 사이트 주소로 제한된 지도 서비스 키
 const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
 const lsSet = (k,v) => { try { localStorage.setItem(k,v); return true; } catch(e){ return false; } };
 const fetchJson = async u => { const r=await fetch(u,{cache:"no-store"}); if(!r.ok) throw new Error("서버 응답 "+r.status); return r.json(); };
@@ -604,7 +617,7 @@ $("#eLink").addEventListener("change", ()=>{
 /* ---------- 주소 검색 ---------- */
 let kakaoReady = null;
 function loadKakao(){
-  const key = lsGet("gridsite.kakaoKey"); if(!key) return Promise.resolve(false);
+  const key = lsGet("gridsite.kakaoKey") || cfg?.kakaoKey; if(!key) return Promise.resolve(false);
   if(kakaoReady) return kakaoReady;
   kakaoReady = new Promise(res=>{
     const s=document.createElement("script");
@@ -628,6 +641,10 @@ async function geocode(q){
       });
     });
     if(r) return r;
+  }
+  if(vwKey()){
+    const v=(await vwSearch(q,"ADDRESS","ROAD","도로명"))[0]||(await vwSearch(q,"ADDRESS","PARCEL","지번"))[0]||(await vwSearch(q,"PLACE","","장소"))[0];
+    if(v) return {lat:v.lat,lng:v.lng,label:v.title};
   }
   const u="https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=kr&accept-language=ko&q="+encodeURIComponent(q);
   const j = await fetch(u).then(r=>r.json()).catch(()=>[]);
@@ -1069,6 +1086,159 @@ $("#nearList").addEventListener("click",e=>{
   const it=e.target.closest("[data-ss]"); if(it){ const s=substations.get(it.dataset.ss); map.setView([s.lat,s.lng],14); }
 });
 
+/* ---------- 지도 검색과 지점 등록 ----------
+   브이월드(지번·도로명·장소)와 카카오(상호)를 함께 쓰고, 키가 없으면 OpenStreetMap으로 찾는다.
+   저장된 현장·변전소는 항상 함께 찾으므로 오프라인에서도 동작한다. */
+const VW_SEARCH="https://api.vworld.kr/req/search", VW_ADDRESS="https://api.vworld.kr/req/address", JSONP_WAIT=8000;
+const vwKey = () => cfg.vworldKey || "";
+const searchLayer = L.layerGroup().addTo(map);
+let pin=null, pinPicking=false, jsonpSeq=0;
+function jsonp(url){
+  return new Promise(res=>{
+    const name=`__vw${++jsonpSeq}`, s=document.createElement("script");
+    const done=v=>{ delete window[name]; s.remove(); clearTimeout(t); res(v); };
+    const t=setTimeout(()=>done(null),JSONP_WAIT);
+    window[name]=done; s.onerror=()=>done(null);
+    s.src=`${url}&callback=${name}`; document.head.appendChild(s);
+  });
+}
+const vwParams = o => new URLSearchParams({key:vwKey(),domain:location.origin,format:"json",errorFormat:"json",...o}).toString();
+async function vwSearch(q,type,category,kind){
+  const j=await jsonp(`${VW_SEARCH}?${vwParams({service:"search",request:"search",version:"2.0",crs:"EPSG:4326",size:"7",query:q,type,...(category?{category}:{})})}`);
+  if(j?.response?.status!=="OK") return [];
+  return j.response.result.items.map(i=>{
+    const a=i.address||{}, addr=a.road||a.parcel||"";
+    return {title:type==="ADDRESS"?addr:(i.title||addr),sub:type==="ADDRESS"?(a.bldnm||""):addr,kind,lat:+i.point.y,lng:+i.point.x,place:type==="PLACE"};
+  });
+}
+async function kakaoSearch(q){
+  if(!await loadKakao()) return [];
+  return new Promise(res=>new kakao.maps.services.Places().keywordSearch(q,(p,st)=>
+    res(st===kakao.maps.services.Status.OK ? p.slice(0,7).map(x=>({title:x.place_name,sub:x.road_address_name||x.address_name,kind:"상호",lat:+x.y,lng:+x.x,place:true})) : [])));
+}
+async function osmSearch(q){
+  const u="https://nominatim.openstreetmap.org/search?format=json&limit=7&countrycodes=kr&accept-language=ko&q="+encodeURIComponent(q);
+  const j=await fetch(u).then(r=>r.json()).catch(()=>[]);
+  return j.map(x=>({title:x.display_name.split(",")[0],sub:x.display_name,kind:"OSM",lat:+x.lat,lng:+x.lon}));
+}
+function localSearch(q){
+  const k=q.toLowerCase(), hit=(...v)=>v.join(" ").toLowerCase().includes(k);
+  return [...sites.filter(s=>hit(s.name,s.address)).map(s=>({title:s.name,sub:s.address,kind:"현장",lat:s.lat,lng:s.lng,siteId:s.id})),
+    ...[...substations.values()].filter(s=>hit(s.name)).slice(0,5).map(s=>({title:s.name,sub:s.voltage?vClass(s.voltage).kv+" kV":"",kind:"변전소",lat:s.lat,lng:s.lng}))];
+}
+async function searchAll(q){
+  const local=localSearch(q);
+  if(isOffline()) return local;
+  const remote=vwKey() ? [kakaoSearch(q),vwSearch(q,"ADDRESS","ROAD","도로명"),vwSearch(q,"ADDRESS","PARCEL","지번"),vwSearch(q,"PLACE","","장소"),vwSearch(q,"DISTRICT","L4","지역"),vwSearch(q,"DISTRICT","L2","지역")]
+    : [kakaoSearch(q).then(r=>r.length?r:osmSearch(q))];
+  const out=[...local], seen=new Set(local.map(r=>r.lat.toFixed(4)+r.lng.toFixed(4)));
+  for(const r of (await Promise.all(remote)).flat()){
+    const k=r.lat.toFixed(4)+r.lng.toFixed(4);
+    if(isFinite(r.lat) && !seen.has(k)){ seen.add(k); out.push(r); }
+  }
+  return out.slice(0,25);
+}
+async function addressAt(lat,lng){
+  if(vwKey() && !isOffline()){
+    const j=await jsonp(`${VW_ADDRESS}?${vwParams({service:"address",request:"getAddress",version:"2.0",crs:"EPSG:4326",type:"both",point:`${lng},${lat}`})}`);
+    const r=j?.response?.result;
+    if(j?.response?.status==="OK" && r?.length) return (r.find(x=>x.type==="road")||r[0]).text;
+  }
+  return reverseGeocode(lat,lng);
+}
+function pinPopup(p){
+  return `<b>${esc(p.title||"선택한 지점")}</b>${p.address? `<br>${esc(p.address)}`:""}
+   <br><span style="font-family:monospace;font-size:11px">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</span>
+   ${isAdmin()?`<div class="pop-actions"><button onclick="App.pinToSite()">현장으로 등록</button></div>`:""}`;
+}
+function showPin(p,zoom){
+  pin=p; searchLayer.clearLayers();
+  const m=L.marker([p.lat,p.lng],{icon:L.divIcon({className:"",html:'<div class="site-pin" style="background:#e03131"></div>',iconSize:[18,18],iconAnchor:[9,18],popupAnchor:[0,-16]})}).bindPopup(pinPopup(p)).addTo(searchLayer);
+  if(zoom) map.setView([p.lat,p.lng],Math.max(map.getZoom(),zoom));
+  m.openPopup();
+  return m;
+}
+function pinToSite(){
+  if(!pin || !isAdmin()) return;
+  clearForm();
+  $("#eName").value=pin.place?pin.title:""; $("#eAddr").value=pin.address||"";
+  $("#eLat").value=pin.lat.toFixed(6); $("#eLng").value=pin.lng.toFixed(6);
+  map.closePopup(); showTab("add"); $("#eName").focus();
+  setStatus("#editStatus","위치를 넣었습니다. 현장명·구분·단계를 확인하고 저장하세요.");
+}
+async function pinAt(latlng){
+  const p={lat:latlng.lat,lng:latlng.lng,title:"선택한 지점",address:""};
+  const m=showPin(p);
+  const a=await addressAt(p.lat,p.lng);
+  if(a && pin===p){ p.address=a; m.setPopupContent(pinPopup(p)); }
+}
+map.on("contextmenu",e=>pinAt(e.latlng));   // 오른쪽 클릭, 핸드폰은 길게 누르기
+
+const SearchBox=L.Control.extend({options:{position:"topright"},onAdd(){
+  const d=L.DomUtil.create("div","map-search");
+  d.innerHTML=`<form id="mapSearchForm"><input type="search" id="mapQ" placeholder="주소, 지명, 상호 검색" aria-label="지도 검색"><button class="btn primary" type="submit">검색</button></form>
+    <div class="acts"><button type="button" class="btn small admin-only" id="btnPinPick">지도에서 지점 선택</button></div>
+    <div class="list" id="mapResults" hidden></div>`;
+  L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+  return d;
+}});
+map.addControl(new SearchBox());
+let searchResults=[];
+$("#mapSearchForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const q=$("#mapQ").value.trim(), box=$("#mapResults"); if(!q) return;
+  box.hidden=false; box.innerHTML=`<div class="rec"><span class="hint">찾는 중…</span></div>`;
+  searchResults=await searchAll(q);
+  const note=!vwKey()&&!isOffline()?"정확한 주소 검색에는 인증키 설정이 필요합니다.":isOffline()?"오프라인에서는 저장된 현장·변전소만 찾습니다.":"";
+  box.innerHTML=(searchResults.length?searchResults.map((r,i)=>`
+    <div class="item" data-i="${i}" tabindex="0" style="grid-template-columns:1fr auto"><div style="min-width:0"><div class="nm">${esc(r.title)}</div><div class="sub">${esc(r.sub)}</div></div><span class="chip">${esc(r.kind)}</span></div>`).join("")
+    :`<div class="rec"><span class="hint">검색 결과가 없습니다.</span></div>`)+(note?`<div class="rec"><span class="hint">${note}</span></div>`:"");
+});
+function pickResult(i){
+  const r=searchResults[i]; if(!r) return;
+  $("#mapResults").hidden=true;
+  if(isMobile()) $("#panel").classList.add("collapsed");
+  if(r.siteId) return focusSite(r.siteId);
+  showPin({lat:r.lat,lng:r.lng,title:r.title,address:["도로명","지번"].includes(r.kind)?r.title:r.sub,place:r.place},16);
+}
+$("#mapResults").addEventListener("click",e=>{ const it=e.target.closest("[data-i]"); if(it) pickResult(+it.dataset.i); });
+$("#mapResults").addEventListener("keydown",e=>{ if(e.key==="Enter"){ const it=e.target.closest("[data-i]"); if(it) pickResult(+it.dataset.i); } });
+$("#mapQ").addEventListener("focus",()=>{ if(searchResults.length) $("#mapResults").hidden=false; });
+$("#btnPinPick").onclick=()=>{ pinPicking=true; map.getContainer().style.cursor="crosshair"; if(isMobile()) $("#panel").classList.add("collapsed"); };
+map.on("click",e=>{ if(!pinPicking) return; pinPicking=false; map.getContainer().style.cursor=""; pinAt(e.latlng); });
+
+/* ---------- 지적도·지적편집도 (브이월드 WMS) ---------- */
+const VW_WMS="https://api.vworld.kr/req/wms";
+const PARCEL_DEFS={
+  lvCadastre:{layers:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",styles:"lp_pa_cbnd_bonbun_line,lp_pa_cbnd_bubun_line",minZoom:15,zIndex:10,opacity:1,name:"지적도"},
+  lvZoning:{layers:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",styles:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",minZoom:12,zIndex:9,opacity:.55,name:"지적편집도"}
+};
+const parcelLayers={};
+function parcelLayer(id){
+  if(parcelLayers[id]) return parcelLayers[id];
+  const d=PARCEL_DEFS[id];
+  const l=L.tileLayer.wms(VW_WMS,{layers:d.layers,styles:d.styles,format:"image/png",transparent:true,version:"1.3.0",crs:L.CRS.EPSG3857,key:vwKey(),domain:location.origin,
+    tileSize:512,minZoom:d.minZoom,maxZoom:19,zIndex:d.zIndex,opacity:d.opacity,attribution:"지적: 브이월드(국토교통부)"});
+  l.on("tileerror",()=>setStatus("#parcelNote",`${d.name}를 불러오지 못했습니다. 인증키나 인터넷 연결을 확인해 주세요.`,true));
+  return parcelLayers[id]=l;
+}
+function applyParcel(){
+  if(!cfg) return;
+  const on=Object.keys(PARCEL_DEFS).filter(id=>$("#"+id).checked);
+  let note="";
+  for(const id of Object.keys(PARCEL_DEFS)){
+    const want=on.includes(id) && vwKey();
+    if(want) map.addLayer(parcelLayer(id)); else if(parcelLayers[id]) map.removeLayer(parcelLayers[id]);
+  }
+  if(on.length){
+    const z=Math.min(...on.map(id=>PARCEL_DEFS[id].minZoom));
+    note=!vwKey()?"지적도를 보려면 브이월드 인증키 설정이 필요합니다.":isOffline()?"지적도는 인터넷이 있을 때만 보입니다.":map.getZoom()<z?"지적 정보는 더 확대하면 나타납니다.":"";
+  }
+  setStatus("#parcelNote",note,!vwKey()&&on.length>0);
+}
+for(const id of Object.keys(PARCEL_DEFS)) bindToggle(id,applyParcel);
+map.on("zoomend",applyParcel);
+
 /* ---------- 현장 상세: 진행 단계, 기록, 첨부 ---------- */
 const today = () => { const d=new Date(); return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
 const fileSize = n => n<1e6 ? Math.ceil(n/1e3)+" KB" : (n/1e6).toFixed(1)+" MB";
@@ -1237,6 +1407,7 @@ $("#btnAdmin").onclick=e=>{
 $("#btnLogout").onclick=()=>{ ssSet(AUTH_KEY,""); lsSet(AUTH_KEY,""); location.reload(); };
 async function gate(){
   try{ const a=await fetchJson("access.json"); if(a.admin?.hash && a.viewer?.hash) access=a; }catch(e){}
+  cfg=await fetchJson("config.json").catch(()=>({})); applyParcel();
   if(!access) return setStatus("#gateStatus","접속 정보를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
   const r=savedRole();
   if(r) enter(r); else showGate("login");
@@ -1458,7 +1629,7 @@ $("#btnWipe").onclick=()=>{
 };
 
 /* ---------- 시작 ---------- */
-window.App={setEnd,near,edit,setStage,detail};
+window.App={setEnd,near,edit,setStage,detail,pinToSite};
 async function startApp(){
   let saved=null; try{ saved=JSON.parse(lsGet(STORE)||"null"); }catch(e){}
   if(Array.isArray(saved)) sites=saved.map(normSite);

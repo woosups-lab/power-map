@@ -53,7 +53,7 @@ jobs:
       - name: 공개할 파일만 모으기
         run: |
           mkdir _site
-          cp -r index.html sw.js manifest.webmanifest access.json grid.json grid-meta.json icons vendor _site/
+          cp -r index.html sw.js manifest.webmanifest access.json config.json grid.json grid-meta.json icons vendor _site/
           # 앱 파일이 바뀔 때만 서비스 워커 버전이 바뀌도록 해시를 넣음
           BUILD=$(cat index.html manifest.webmanifest sw.js $(find icons vendor -type f | sort) | sha256sum | cut -c1-12)
           sed -i "s/__BUILD__/$BUILD/" _site/sw.js
