@@ -460,7 +460,8 @@ function setBase(k){
   baseKey=k; curBase=bases[k].addTo(map); curBase.bringToBack?.();
   const sel=document.querySelector("#baseSel"); if(sel) sel.value=k;
   const note=document.querySelector("#baseNote"); if(note) note.hidden = k==="vector";
-  if(k==="vector") setTimeout(()=>{ if(baseKey!=="vector" || vectorReady) return;
+  if(k==="vector") setTimeout(function check(){ if(baseKey!=="vector" || vectorReady) return;
+    if(document.hidden) return setTimeout(check,VECTOR_WAIT);   // 백그라운드 탭은 지도를 그리지 않음
     if(isOffline()) return setStatus("#infraStatus","오프라인이라 배경지도를 불러오지 못했습니다. 온라인일 때 한 번 열어 두거나 오프라인 탭에서 지역을 저장하세요.",true);
     setBase("esri");
     setStatus("#infraStatus","항목 선택 지도를 불러오지 못해 일반 지도로 바꿨습니다. 설정 탭에서 다시 고를 수 있습니다.",true); },VECTOR_WAIT);
