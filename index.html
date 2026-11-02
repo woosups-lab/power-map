@@ -92,6 +92,21 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
 .acts{display:flex;gap:4px;flex-wrap:wrap}
 .pop-stage{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px}
 .pop-stage select{padding:3px 6px;font-size:12px;width:auto;flex:1}
+.filter-bar{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.dd{display:flex;align-items:center;justify-content:space-between;gap:6px;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);cursor:pointer;min-width:0}
+.dd span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dd.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.dd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dd-pop{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.18);padding:8px 10px}
+.dd-tools{display:flex;gap:14px;margin-bottom:4px}
+.link{border:0;background:none;padding:0;color:var(--accent);font-size:12px;cursor:pointer}
+.dd-opt{display:flex;align-items:center;gap:8px;padding:4px 0}
+.dd-opt label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer}
+.dd-opt input{margin:0;flex:none}
+.dd-opt .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.dd-opt .n{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.dd-opt .link{color:var(--muted)}
+.filter-info{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);min-height:18px}
 .map-search{width:min(340px,calc(100vw - 76px));display:flex;flex-direction:column;gap:6px;background:none}
 .map-search form{display:flex;gap:6px}
 .map-search form input{flex:1;min-width:0;background:var(--panel);box-shadow:0 1px 5px rgba(0,0,0,.3)}
@@ -156,10 +171,12 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
   <!-- 현장 목록 -->
   <section class="view" data-view="sites">
     <input type="search" id="q" placeholder="현장명, 주소, 메모 검색">
-    <div class="row">
-      <select id="fCat"><option value="">전체 구분</option></select>
-      <select id="fStatus"><option value="">전체 단계</option></select>
+    <div class="filter-bar" id="filterBar">
+      <button class="dd" id="ddCat" data-f="cat" aria-expanded="false" aria-controls="ddPop"></button>
+      <button class="dd" id="ddSt" data-f="st" aria-expanded="false" aria-controls="ddPop"></button>
+      <div class="dd-pop" id="ddPop" hidden></div>
     </div>
+    <div class="filter-info" id="filterInfo" hidden><span id="filterCount"></span><button class="link" id="filterReset">필터 초기화</button></div>
     <div class="list" id="siteList"></div>
     <h2>송전선로 (전압별)</h2>
     <div class="legend toggles">
@@ -503,7 +520,7 @@ function sitePopup(s){
 }
 function renderMarkers(){
   siteLayer.clearLayers(); markers.clear();
-  for(const s of sites){
+  for(const s of visibleSites()){
     const m = L.marker([s.lat,s.lng],{icon:siteIcon(s), title:s.name}).bindPopup(sitePopup(s));
     m.bindTooltip(s.name,{direction:"top",offset:[0,-16]});
     m.addTo(siteLayer); markers.set(s.id,m);
@@ -514,18 +531,65 @@ function renderMarkers(){
 function fillSelect(sel, items, first){
   sel.innerHTML = (first? `<option value="">${first}</option>`:"") + items.map(v=>`<option>${esc(v)}</option>`).join("");
 }
-fillSelect($("#fCat"), Object.keys(CATS), "전부");
-fillSelect($("#fStatus"), STATUSES, "전체 단계");
 fillSelect($("#eCat"), Object.keys(CATS));
 fillSelect($("#eStatus"), STATUSES);
 fillSelect($("#dCat"), Object.keys(CATS));
 fillSelect($("#dStatus"), STATUSES);
 
+/* 구분·단계 필터: 뺀 항목을 저장하므로 새 구분이 생겨도 기본으로 보임. 목록과 지도에 함께 적용 */
+const FILTER_KEY="gridsite.siteFilter";
+let filterOff={cat:[],st:[]}, ddOpen=null;
+try{ filterOff={...filterOff,...JSON.parse(lsGet(FILTER_KEY)||"{}")}; }catch(e){}
+const filterOptions = f => f==="st" ? STATUSES : [...Object.keys(CATS),...(sites.some(s=>s.category===UNCAT)?[UNCAT]:[])];
+const siteField = (s,f) => f==="st" ? s.status : s.category;
+function matchSite(s,skip){
+  const q=$("#q").value.trim().toLowerCase();
+  return ["cat","st"].every(f=>f===skip||!filterOff[f].includes(siteField(s,f))) &&
+    (!q || [s.name,s.address,s.memo,s.capacity].join(" ").toLowerCase().includes(q));
+}
+const visibleSites = () => sites.filter(s=>matchSite(s));
+function applyFilter(){ lsSet(FILTER_KEY,JSON.stringify(filterOff)); renderMarkers(); renderList(); }
+function filterLabel(f){
+  const all=filterOptions(f), on=all.filter(k=>!filterOff[f].includes(k)), name=f==="st"?"단계":"구분";
+  return on.length===all.length?`${name}: 전부`:!on.length?`${name}: 없음`:on.length===1?on[0]:`${on[0]} 외 ${on.length-1}`;
+}
+function renderFilters(){
+  for(const [id,f] of [["#ddCat","cat"],["#ddSt","st"]]){
+    const b=$(id), all=filterOptions(f);
+    b.innerHTML=`<span>${esc(filterLabel(f))}</span><span aria-hidden="true">${ddOpen===f?"▴":"▾"}</span>`;
+    b.classList.toggle("on",all.some(k=>filterOff[f].includes(k)));
+    b.setAttribute("aria-expanded",ddOpen===f);
+  }
+  const pop=$("#ddPop"); pop.hidden=!ddOpen; if(!ddOpen) return;
+  const f=ddOpen, count=k=>sites.filter(s=>siteField(s,f)===k&&matchSite(s,f)).length;
+  pop.innerHTML=`<div class="dd-tools"><button class="link" data-act="all">모두 선택</button><button class="link" data-act="none">모두 해제</button></div>`+
+    filterOptions(f).map(k=>`<div class="dd-opt"><label><input type="checkbox" data-k="${esc(k)}"${filterOff[f].includes(k)?"":" checked"}>${f==="cat"?`<i class="dot" style="background:${catColor(k)}"></i>`:""}<span>${esc(k)}</span></label><span class="n">${count(k)}</span><button class="link" data-only="${esc(k)}">이것만</button></div>`).join("");
+}
+$("#filterBar").addEventListener("click",e=>{
+  const dd=e.target.closest(".dd");
+  if(dd){ ddOpen=ddOpen===dd.dataset.f?null:dd.dataset.f; return renderFilters(); }
+  const f=ddOpen, b=e.target.closest("button"); if(!f||!b) return;
+  const all=filterOptions(f);
+  if(b.dataset.only) filterOff[f]=all.filter(k=>k!==b.dataset.only);
+  else if(b.dataset.act) filterOff[f]=b.dataset.act==="all"?[]:[...all];
+  else return;
+  applyFilter();
+});
+$("#ddPop").addEventListener("change",e=>{
+  const k=e.target.dataset.k, f=ddOpen; if(!k) return;
+  filterOff[f]=e.target.checked?filterOff[f].filter(x=>x!==k):[...filterOff[f],k];
+  applyFilter();
+  $("#ddPop").querySelector(`[data-k="${CSS.escape(k)}"]`)?.focus();
+});
+document.addEventListener("click",e=>{ if(ddOpen&&!e.composedPath().includes($("#filterBar"))){ ddOpen=null; renderFilters(); } });   // 항목은 다시 그려지므로 target으로 판단하지 않음
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&ddOpen){ ddOpen=null; renderFilters(); } });
+function resetFilter(){ filterOff={cat:[],st:[]}; $("#q").value=""; applyFilter(); }
+$("#filterReset").onclick=resetFilter;
+/* 필터에 가려진 현장을 찾아갈 때는 필터를 풀어 핀이 보이게 함 */
+function revealSite(id){ if(!markers.has(id)) resetFilter(); markers.get(id)?.openPopup(); }
+
 function renderList(){
-  const q = $("#q").value.trim().toLowerCase(), fc=$("#fCat").value, fs=$("#fStatus").value;
-  const rows = sites.filter(s => (!fc||s.category===fc) && (!fs||s.status===fs) &&
-     (!q || [s.name,s.address,s.memo,s.capacity].join(" ").toLowerCase().includes(q)))
-     .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+  const rows = visibleSites().sort((a,b)=>a.name.localeCompare(b.name,"ko"));
   $("#siteList").innerHTML = rows.length ? rows.map(s=>`
     <div class="item" data-id="${s.id}" tabindex="0">
       <span class="dot" style="background:${catColor(s.category)}"></span>
@@ -533,16 +597,19 @@ function renderList(){
       <div class="meta">${esc(s.status)}${s.example?'<br><span class="chip">예시</span>':""}</div>
     </div>`).join("") : `<div class="item" style="cursor:default;grid-template-columns:1fr"><span class="sub">${sites.length? "조건에 맞는 현장이 없습니다." : "아직 현장이 없습니다. ‘추가·가져오기’ 탭에서 등록하세요."}</span></div>`;
   $("#countChip").textContent = sites.length + "개 현장";
+  $("#filterCount").textContent = `${rows.length}곳 표시`;
+  $("#filterInfo").hidden = rows.length===sites.length;
+  renderFilters();
   renderEndSelects();
 }
 $("#siteList").addEventListener("click", e=>{ const it=e.target.closest(".item[data-id]"); if(it) focusSite(it.dataset.id); });
 $("#siteList").addEventListener("keydown", e=>{ if(e.key==="Enter"){ const it=e.target.closest(".item[data-id]"); if(it) focusSite(it.dataset.id);} });
-["#q","#fCat","#fStatus"].forEach(s=>$(s).addEventListener("input",renderList));
+$("#q").addEventListener("input",applyFilter);
 
 function focusSite(id){
   const s = sites.find(x=>x.id===id); if(!s) return;
   map.setView([s.lat,s.lng], Math.max(map.getZoom(),13));
-  markers.get(id)?.openPopup();
+  revealSite(id);
   if(isMobile()) $("#panel").classList.add("collapsed");
 }
 function refreshAll(){ save(); renderMarkers(); renderList(); }
@@ -572,7 +639,7 @@ $("#btnSave").onclick = () => {
   const i = sites.findIndex(x=>x.id===id);
   if(i>=0) sites[i]={...sites[i],...rec, example:false}; else sites.push({...rec,logs:[],files:[]});
   refreshAll(); clearForm(); setStatus("#editStatus","저장했습니다: "+name);
-  map.setView([lat,lng],13); markers.get(id)?.openPopup();
+  map.setView([lat,lng],13); revealSite(id);
 };
 let delArmed=false;
 $("#btnDelete").onclick = () => {
