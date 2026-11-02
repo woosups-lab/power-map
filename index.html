@@ -411,6 +411,7 @@ function groupOf(layer){
 }
 const OFM="https://tiles.openfreemap.org", STYLE_URL=OFM+"/styles/liberty", TILEJSON_URL=OFM+"/planet";
 const DEM_URL="https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png", DEM_MAXZ=11;
+const VECTOR_WAIT=30000;   // Esri는 시골 지역을 확대하면 비어 있어, 느린 연결에서도 넉넉히 기다림
 let glMap=null, vectorReady=false;
 function makeVector(){
   const layer=L.maplibreGL({style:STYLE_URL,
@@ -462,7 +463,7 @@ function setBase(k){
   if(k==="vector") setTimeout(()=>{ if(baseKey!=="vector" || vectorReady) return;
     if(isOffline()) return setStatus("#infraStatus","오프라인이라 배경지도를 불러오지 못했습니다. 온라인일 때 한 번 열어 두거나 오프라인 탭에서 지역을 저장하세요.",true);
     setBase("esri");
-    setStatus("#infraStatus","항목 선택 지도를 불러오지 못해 일반 지도로 바꿨습니다. 설정 탭에서 다시 고를 수 있습니다.",true); },12000);
+    setStatus("#infraStatus","항목 선택 지도를 불러오지 못해 일반 지도로 바꿨습니다. 설정 탭에서 다시 고를 수 있습니다.",true); },VECTOR_WAIT);
 }
 setBase(baseKey);
 let tileErrors = 0;
