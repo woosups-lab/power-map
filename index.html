@@ -1216,8 +1216,8 @@ map.on("click",e=>{ if(!pinPicking) return; pinPicking=false; map.getContainer()
 /* ---------- 지적도·지적편집도 (브이월드 WMS) ---------- */
 const VW_WMS="https://api.vworld.kr/req/wms";
 const PARCEL_DEFS={
-  lvCadastre:{layers:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",styles:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",minZoom:15,zIndex:10,opacity:.75,name:"지적도"},   // 기본 스타일에 지번이 표시됨
-  lvZoning:{layers:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",styles:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",minZoom:12,zIndex:9,opacity:.55,name:"지적편집도"}
+  lvCadastre:{layers:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",styles:"lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun",minZoom:16,zIndex:10,opacity:.75,px:1024,name:"지적도"},   // 기본 스타일에 지번이 표시됨. 서버는 일정 축척 이상에서만 그려서 2배 해상도로 요청
+  lvZoning:{layers:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",styles:"lt_c_uq111,lt_c_uq112,lt_c_uq113,lt_c_uq114",minZoom:12,zIndex:9,opacity:.55,px:512,name:"지적편집도"}
 };
 const parcelLayers={};
 function parcelLayer(id){
@@ -1225,6 +1225,7 @@ function parcelLayer(id){
   const d=PARCEL_DEFS[id];
   const l=L.tileLayer.wms(VW_WMS,{layers:d.layers,styles:d.styles,format:"image/png",transparent:true,version:"1.3.0",crs:L.CRS.EPSG3857,key:vwKey(),domain:location.origin,
     tileSize:512,minZoom:d.minZoom,maxZoom:19,zIndex:d.zIndex,opacity:d.opacity,attribution:"지적: 브이월드(국토교통부)"});
+  l.wmsParams.width=l.wmsParams.height=d.px;
   l.on("tileerror",()=>setStatus("#parcelNote",`${d.name}를 불러오지 못했습니다. 인증키나 인터넷 연결을 확인해 주세요.`,true));
   return parcelLayers[id]=l;
 }
