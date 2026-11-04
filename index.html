@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>현장 전력지도</title>
+<title>LS일렉트릭 스마트에너지 사업 현황</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b6bcb">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="전력지도">
+<meta name="apple-mobile-web-app-title" content="LS 스마트에너지">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
@@ -36,7 +36,7 @@ button,input,select,textarea{font:inherit;color:inherit}
   display:flex;flex-direction:column;z-index:1000;padding-top:env(safe-area-inset-top,0px)}
 #map{flex:1;height:100%;position:relative}
 header.top{padding:14px 16px 10px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
-header.top h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-.01em;flex:1}
+header.top h1{font-size:16px;line-height:1.3;margin:0;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0;word-break:keep-all}
 .tabs{display:flex;border-bottom:1px solid var(--line)}
 .tabs button{flex:1;background:none;border:0;padding:10px 4px;cursor:pointer;color:var(--muted);font-weight:500;border-bottom:2px solid transparent}
 .tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
@@ -71,6 +71,7 @@ h2{font-size:13px;margin:6px 0 0;color:var(--muted);font-weight:600;letter-spaci
 .legend i{display:inline-block;width:22px;height:4px;border-radius:2px}
 .status{font-size:12px;color:var(--muted);min-height:18px}
 .status.err{color:var(--warn)}
+.status:empty{display:none}
 progress{width:100%;height:8px;accent-color:var(--accent)}
 .chip.off{background:var(--warn);color:var(--panel);font-weight:600}
 .region{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
@@ -132,7 +133,8 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
   #map{position:fixed;inset:0;height:auto}
   #panel{position:fixed;left:0;right:0;bottom:0;width:auto;height:62%;border-right:0;border-top:1px solid var(--line);
     border-radius:14px 14px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.2);transition:transform .25s ease;padding-top:0}
-  #panel.collapsed{transform:translateY(calc(100% - 52px))}
+  #panel.collapsed{transform:translateY(calc(100% - 62px))}
+  header.top h1{font-size:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   header.top{cursor:pointer}
   #mobileToggle{display:inline-flex}
   .view{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -143,7 +145,7 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
 <body data-role="viewer">
 <div id="gate">
   <form id="gateForm">
-    <h1>현장 전력지도</h1>
+    <h1>LS일렉트릭 스마트에너지 사업 현황</h1>
     <p class="hint" id="gateMsg">비밀번호를 입력하세요.</p>
     <label class="f" id="gateEmailRow" hidden>관리자 이메일<input type="email" id="gateEmail" autocomplete="username"></label>
     <input type="password" id="gatePw" autocomplete="current-password" aria-label="비밀번호">
@@ -156,7 +158,7 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
 <div id="photoView" hidden><img id="photoImg" alt=""><button class="btn" id="photoClose">닫기</button></div>
 <aside id="panel">
   <header class="top" id="panelHead">
-    <h1>현장 전력지도</h1>
+    <h1>LS일렉트릭 스마트에너지 사업 현황</h1>
     <span class="chip off" id="netChip" hidden>오프라인</span>
     <span class="chip" id="countChip">0개 현장</span>
     <button class="btn small" id="btnAdmin">관리자 모드</button>
@@ -222,7 +224,8 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
       <label class="f">구분<select id="dCat"></select></label>
       <label class="f">진행 단계<select id="dStatus"></select></label>
     </div>
-    <button class="btn small admin-only" id="btnDetailEdit" style="align-self:flex-start">이름·주소·위치 수정</button>
+    <div class="acts admin-only"><button class="btn small" id="btnDetailEdit">이름·주소·위치 수정</button><button class="btn small" id="btnSiteDel">현장 삭제</button></div>
+    <p class="status" id="dDelStatus"></p>
     <p class="status" id="dMemo" style="white-space:pre-wrap"></p>
     <h2>기록</h2>
     <div class="card admin-only">
@@ -640,14 +643,22 @@ $("#btnSave").onclick = () => {
   refreshAll(); clearForm(); setStatus("#editStatus","저장했습니다: "+name);
   map.setView([lat,lng],13); revealSite(id);
 };
-let delArmed=false;
-$("#btnDelete").onclick = () => {
-  if(!delArmed){ delArmed=true; $("#btnDelete").textContent="한 번 더 누르면 삭제"; setTimeout(()=>{delArmed=false;$("#btnDelete").textContent="삭제";},3000); return; }
-  const gone=sites.find(x=>x.id===$("#eId").value);
-  if(gone) removeAttachments(gone.id,gone.files.map(f=>f.id));
-  sites = sites.filter(x=>x!==gone); delArmed=false; $("#btnDelete").textContent="삭제";
-  refreshAll(); clearForm(); setStatus("#editStatus","삭제했습니다.");
-};
+function deleteSite(id){
+  const gone=sites.find(x=>x.id===id); if(!gone || !isAdmin()) return null;
+  removeAttachments(gone.id,gone.files.map(f=>f.id));
+  sites=sites.filter(x=>x!==gone); map.closePopup(); refreshAll();
+  return gone;
+}
+/* 실수로 지우지 않도록 3초 안에 한 번 더 눌러야 삭제 */
+function armDelete(btn,label,onConfirm){
+  if(btn.dataset.armed){ delete btn.dataset.armed; btn.textContent=label; return onConfirm(); }
+  btn.dataset.armed="1"; btn.textContent="한 번 더 누르면 삭제";
+  setTimeout(()=>{ delete btn.dataset.armed; btn.textContent=label; },3000);
+}
+$("#btnDelete").onclick = () => armDelete($("#btnDelete"),"삭제",()=>{
+  const gone=deleteSite($("#eId").value);
+  clearForm(); if(gone) setStatus("#editStatus",`삭제했습니다: ${gone.name}`);
+});
 $("#btnPick").onclick = () => {
   picking=true; map.getContainer().style.cursor="crosshair";
   setStatus("#editStatus","지도에서 현장 위치를 누르세요.");
@@ -853,7 +864,7 @@ $("#expCsv").onclick=()=>{
 $("#expKml").onclick=()=>{
   const x=s=>esc(s);
   const body=sites.map(s=>`<Placemark><name>${x(s.name)}</name><description>${x([s.category,s.status,s.capacity,s.address,s.memo].filter(Boolean).join(" / "))}</description><Point><coordinates>${s.lng},${s.lat},0</coordinates></Point></Placemark>`).join("\n");
-  download(`현장목록_${stamp()}.kml`,`<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>현장 전력지도</name>\n${body}\n</Document></kml>`,"application/vnd.google-earth.kml+xml");
+  download(`현장목록_${stamp()}.kml`,`<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>LS일렉트릭 스마트에너지 사업 현황</name>\n${body}\n</Document></kml>`,"application/vnd.google-earth.kml+xml");
 };
 
 /* ---------- 송전선로·변전소·발전소 (grid.json 우선, 없으면 Overpass = OpenInfraMap 원본 OSM) ---------- */
@@ -1349,6 +1360,11 @@ function renderDetail(){
 }
 $("#btnBack").onclick=()=>showTab("sites");
 $("#btnDetailEdit").onclick=()=>edit(curDetail);
+$("#btnSiteDel").onclick=()=>armDelete($("#btnSiteDel"),"현장 삭제",()=>{
+  const gone=deleteSite(curDetail); if(!gone) return;
+  curDetail=null; showTab("sites");
+  setStatus("#syncNote",`삭제했습니다: ${gone.name}`);
+});
 $("#dCat").onchange=()=>{ const s=curSite(); if(s&&isAdmin()){ s.category=$("#dCat").value; refreshAll(); } };
 $("#dStatus").onchange=()=>setStage(curDetail,$("#dStatus").value,false);
 $("#btnLogAdd").onclick=()=>{
