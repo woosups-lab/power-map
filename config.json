@@ -1,4 +1,7 @@
 {
   "vworldKey": "",
-  "kakaoKey": ""
+  "kakaoKey": "",
+  "supabaseUrl": "",
+  "supabaseKey": "",
+  "viewerEmail": ""
 }

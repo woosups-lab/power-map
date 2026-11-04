@@ -145,8 +145,10 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
   <form id="gateForm">
     <h1>현장 전력지도</h1>
     <p class="hint" id="gateMsg">비밀번호를 입력하세요.</p>
+    <label class="f" id="gateEmailRow" hidden>관리자 이메일<input type="email" id="gateEmail" autocomplete="username"></label>
     <input type="password" id="gatePw" autocomplete="current-password" aria-label="비밀번호">
     <button class="btn primary" type="submit">들어가기</button>
+    <button class="link" type="button" id="gateSwitch" style="align-self:center">관리자로 로그인</button>
     <button class="btn" type="button" id="gateCancel" hidden>취소</button>
     <p class="status" id="gateStatus"></p>
   </form>
@@ -176,6 +178,8 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
       <button class="dd" id="ddSt" data-f="st" aria-expanded="false" aria-controls="ddPop"></button>
       <div class="dd-pop" id="ddPop" hidden></div>
     </div>
+    <div class="card admin-only" id="legacyBox" hidden><span class="status" id="legacyMsg"></span><button class="btn primary" id="btnLegacy">서버로 올리기</button></div>
+    <p class="status" id="syncNote"></p>
     <div class="filter-info" id="filterInfo" hidden><span id="filterCount"></span><button class="link" id="filterReset">필터 초기화</button></div>
     <div class="list" id="siteList"></div>
     <h2>송전선로 (전압별)</h2>
@@ -277,7 +281,7 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
       <button class="btn" id="expCsv">CSV(엑셀)</button>
       <button class="btn" id="expKml">KML(구글어스)</button>
     </div>
-    <p class="hint">현장 정보는 이 기기에만 저장되고 어디로도 전송되지 않습니다. 이용자나 다른 기기에는 전체 백업 ZIP을 전달하세요. ZIP은 암호화되지 않으니 회사 내부 경로로만 전달하고, 공개 저장소에는 올리지 마세요. JSON·CSV·KML에는 첨부 파일이 들어가지 않습니다.</p>
+    <p class="hint">전체 백업 ZIP은 보관용입니다. 암호화되지 않으니 회사 내부에만 보관하고 공개 저장소에는 올리지 마세요. JSON·CSV·KML에는 첨부 파일이 들어가지 않습니다.</p>
   </section>
 
   <!-- 경로 -->
@@ -331,19 +335,13 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
     <h2>사용자</h2>
     <p class="status" id="roleNote"></p>
     <button class="btn" id="btnLogout">로그아웃</button>
-    <h2>현장 데이터 받기</h2>
-    <p class="hint">관리자에게 받은 전체 백업 ZIP을 불러옵니다.<span id="restoreNote"></span></p>
-    <input type="file" id="restoreIn" accept=".zip">
-    <p class="status" id="restoreStatus"></p>
     <div class="admin-only" style="display:flex;flex-direction:column;gap:12px">
       <h2>비밀번호 관리</h2>
       <label class="f">새 이용자 비밀번호 (바꿀 때만 입력)<input type="password" id="pwViewer" autocomplete="new-password"></label>
       <label class="f">새 관리자 비밀번호 (바꿀 때만 입력)<input type="password" id="pwAdmin" autocomplete="new-password"></label>
       <button class="btn primary" id="btnPwApply">비밀번호 변경 적용</button>
       <p class="status" id="pwStatus"></p>
-      <label class="f">GitHub 토큰 (이 기기에만 저장)<input type="password" id="ghToken" autocomplete="off" placeholder="github_pat_…"></label>
-      <button class="btn" id="btnTokenSave">토큰 저장</button>
-      <p class="hint">토큰이 있으면 변경이 바로 사이트에 반영됩니다(약 1분). <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">토큰 만들기</a>: power-map 저장소만 선택하고 Contents 권한을 Read and write로 주세요. 토큰이 없으면 access.json 파일을 내려받아 저장소에 직접 올립니다.</p>
+      <p class="hint">6자 이상이어야 합니다. 바뀐 비밀번호는 바로 적용됩니다.</p>
     </div>
     <h2>앱으로 설치</h2>
     <button class="btn" id="btnInstall" hidden>이 기기에 설치</button>
@@ -356,10 +354,10 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
     <h2>배경 지도</h2>
     <select id="baseSel"><option value="vector">항목 선택 지도 (도로·하천·산·건물 켜고 끄기)</option><option value="esri">일반 지도 (Esri)</option><option value="sat">위성 사진</option><option value="osm">OpenStreetMap (웹에 올렸을 때만)</option></select>
     <h2>데이터</h2>
-    <p class="hint">현장 정보는 지금 쓰는 브라우저(또는 설치한 앱) 안에 저장됩니다. 브라우저와 설치한 앱의 저장 공간이 다른 기기도 있으니, 기기를 바꾸거나 앱을 지우기 전에 JSON으로 내보내 두세요.</p>
+    <p class="hint">현장·기록·첨부는 서버에 저장되어 모든 기기에서 같이 보입니다. 이 기기에도 저장본을 두어 오프라인에서 볼 수 있고, 오프라인에서 고친 내용은 연결되면 서버에 저장됩니다. 서버에는 자동 백업이 없으니 관리자는 가끔 전체 백업 ZIP을 받아 두세요.</p>
     <button class="btn" id="btnRegrid">전력설비 다시 받기</button>
     <p class="hint">전력설비 데이터는 매주 자동으로 갱신됩니다. 시작할 때 새 날짜가 있으면 알아서 받으므로 평소에는 누를 필요가 없습니다.</p>
-    <button class="btn admin-only" id="btnWipe">이 기기의 현장 모두 지우기</button>
+    <button class="btn" id="btnWipe">이 기기 저장본 지우기</button>
     <p class="status" id="wipeStatus"></p>
   </section>
 </aside>
@@ -369,6 +367,7 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/maplibre-gl-csp.js"></script>
 <script src="vendor/leaflet-maplibre-gl.js"></script>
+<script src="vendor/supabase.js"></script>
 <script>
 /* 워커를 별도 파일로 두어야 사파리에서도 서비스 워커가 타일 요청을 받음 */
 if(window.maplibregl) maplibregl.setWorkerUrl("vendor/maplibre-gl-csp-worker.js");
@@ -386,7 +385,7 @@ const normCat = c => CATS[c] ? c : (OLD_CAT[c] || UNCAT);
 const normStatus = s => STATUSES.includes(s) ? s : (OLD_STATUS[s] || STATUSES[0]);
 const normSite = s => ({...s, category:normCat(s.category), status:normStatus(s.status), logs:s.logs||[], files:s.files||[]});
 const ROUTE_COLORS = ["#0b6bcb","#e8590c","#2f9e44"];
-const STORE = "gridsite.sites.v1";
+const STORE = "gridsite.sites.v1";   // 서버 연결 전 이 기기에만 저장하던 현장 (올리기 안내에 사용)
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -412,7 +411,7 @@ const isAdmin = () => role==="admin";
 const substations = new Map();   // id -> {id,name,lat,lng,voltage,operator}
 let picking = false;
 
-function save(){ if(!lsSet(STORE, JSON.stringify(sites))) setStatus("#infraStatus","현장을 기기에 저장하지 못했습니다. 저장 공간을 확인하고 JSON으로 내보내 두세요.",true); }
+function save(){ if(!lsSet(CACHE_KEY, JSON.stringify(sites))) setStatus("#infraStatus","현장을 기기에 저장하지 못했습니다. 저장 공간을 확인해 주세요.",true); queuePush(); }
 function setStatus(el, msg, err){ const e=$(el); e.textContent=msg||""; e.classList.toggle("err",!!err); }
 
 /* ---------- 지도 ---------- */
@@ -645,7 +644,7 @@ let delArmed=false;
 $("#btnDelete").onclick = () => {
   if(!delArmed){ delArmed=true; $("#btnDelete").textContent="한 번 더 누르면 삭제"; setTimeout(()=>{delArmed=false;$("#btnDelete").textContent="삭제";},3000); return; }
   const gone=sites.find(x=>x.id===$("#eId").value);
-  (gone?.files||[]).forEach(f=>IDB.delFile(f.id));
+  if(gone) removeAttachments(gone.id,gone.files.map(f=>f.id));
   sites = sites.filter(x=>x!==gone); delArmed=false; $("#btnDelete").textContent="삭제";
   refreshAll(); clearForm(); setStatus("#editStatus","삭제했습니다.");
 };
@@ -826,7 +825,7 @@ const stamp = () => new Date().toISOString().slice(0,10);
 $("#expZip").onclick=async()=>{
   const z=new JSZip(), list=sites.filter(s=>!s.example);
   z.file("sites.json",JSON.stringify(list,null,2));
-  for(const s of list) for(const f of s.files){ const b=await IDB.getFile(f.id); if(b) z.file("files/"+f.id,b); }
+  for(const s of list) for(const f of s.files){ const b=await getAttachment(s,f); if(b) z.file("files/"+f.id,b); }
   download(`현장백업_${stamp()}.zip`,await z.generateAsync({type:"blob"}),"application/zip");
 };
 async function restoreBackup(f,replace){
@@ -837,20 +836,13 @@ async function restoreBackup(f,replace){
   if(replace){ await IDB.clearFiles(); sites=[]; }
   for(const s of incoming){
     s.files=s.files.filter(safe);
-    for(const m of s.files){ const b=z.file("files/"+m.id); if(b) await IDB.putFile(m.id,new Blob([await b.async("arraybuffer")],{type:m.type})); }
+    for(const m of s.files){ const b=z.file("files/"+m.id); if(!b) continue; const blob=new Blob([await b.async("arraybuffer")],{type:m.type}); await IDB.putFile(m.id,blob); if(isAdmin()) await uploadAttachment(s.id,m.id,blob); }
     const i=sites.findIndex(x=>x.id===s.id); if(i>=0) sites[i]=s; else sites.push(s);
   }
   refreshAll();
   if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.1));
   return incoming.length;
 }
-$("#restoreIn").addEventListener("change",async e=>{
-  const f=e.target.files[0]; if(!f) return;
-  setStatus("#restoreStatus","불러오는 중…");
-  try{ const n=await restoreBackup(f,!isAdmin()); setStatus("#restoreStatus",`${n}개 현장을 불러왔습니다.`); }
-  catch(err){ setStatus("#restoreStatus","불러오지 못했습니다: "+err.message,true); }
-  e.target.value="";
-});
 $("#expJson").onclick=()=>download("sites.json", JSON.stringify(sites.filter(s=>!s.example),null,2),"application/json");
 $("#expCsv").onclick=()=>{
   const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
@@ -1349,7 +1341,7 @@ function renderDetail(){
         <div class="top" style="margin:2px 0 4px">${ro?`<span class="hint num">${esc(f.date)}</span>`:`<input type="date" data-f="date" value="${esc(f.date)}" aria-label="첨부 날짜">`}<span class="hint">${fileSize(f.size)}</span></div>
         <div class="acts"><button class="btn small" data-act="open">보기</button><button class="btn small" data-act="save">내려받기</button>${ro?"":'<button class="btn small" data-act="del">삭제</button>'}</div></div></div>`).join("")
     :`<div class="rec"><span class="hint">아직 첨부가 없습니다.</span></div>`;
-  for(const f of files) if(f.type.startsWith("image/") && f.type!=="image/svg+xml") IDB.getFile(f.id).then(b=>{
+  for(const f of files) if(f.type.startsWith("image/") && f.type!=="image/svg+xml") getAttachment(s,f).then(b=>{
     const box=document.querySelector(`[data-thumb="${CSS.escape(f.id)}"]`); if(!b||!box) return;
     const u=URL.createObjectURL(b); thumbUrls.push(u);
     box.innerHTML=""; const img=new Image(); img.src=u; img.alt=""; img.className="thumb"; box.appendChild(img);
@@ -1383,8 +1375,10 @@ $("#dFileIn").addEventListener("change",async e=>{
     for(let i=0;i<list.length;i++){
       const f=list[i], id=uid();
       setStatus("#dFileStatus",`저장 중… ${i+1}/${list.length}`);
-      await IDB.putFile(id,f);
-      s.files.push({id,name:f.name,type:f.type,size:f.size,date});
+      const blob=await shrinkImage(f);
+      if(blob.size>MAX_FILE) throw new Error(`${f.name}은(는) 50MB를 넘어 올릴 수 없습니다`);
+      await IDB.putFile(id,blob); await uploadAttachment(s.id,id,blob);
+      s.files.push({id,name:blob.name||f.name,type:blob.type,size:blob.size,date});
     }
     save(); setStatus("#dFileStatus",`${list.length}개를 첨부했습니다.`);
   }catch(err){ save(); setStatus("#dFileStatus","첨부하지 못했습니다: "+err.message,true); }
@@ -1401,118 +1395,220 @@ $("#dFiles").addEventListener("click",async e=>{
   const s=curSite(), m=s.files.find(x=>x.id===e.target.closest(".rec").dataset.id); if(!m) return;
   if(act==="del"){
     if(!isAdmin()) return;
-    s.files=s.files.filter(x=>x!==m); await IDB.delFile(m.id); save(); return renderDetail();
+    s.files=s.files.filter(x=>x!==m); await removeAttachments(s.id,[m.id]); save(); return renderDetail();
   }
-  const b=await IDB.getFile(m.id).catch(()=>null);
-  if(!b) return setStatus("#dFileStatus","이 기기에 파일이 없습니다. 전체 백업을 다시 받아 주세요.",true);
+  const b=await getAttachment(s,m).catch(()=>null);
+  if(!b) return setStatus("#dFileStatus",isOffline()?"오프라인에서는 이 기기에서 열어 본 적 있는 파일만 볼 수 있습니다.":"파일을 받지 못했습니다.",true);
   if(act==="open" && m.type.startsWith("image/") && m.type!=="image/svg+xml"){ $("#photoImg").src=URL.createObjectURL(b); $("#photoView").hidden=false; }
   else if(act==="open" && m.type==="application/pdf") window.open(URL.createObjectURL(b),"_blank","noopener");
   else download(m.name,b,m.type);
 });
 $("#photoClose").onclick=()=>{ URL.revokeObjectURL($("#photoImg").src); $("#photoImg").removeAttribute("src"); $("#photoView").hidden=true; };
 
-/* ---------- 입장: 비밀번호 ----------
-   서버가 없으므로 공개 파일 access.json의 해시와 비교한다. 화면을 나누는 장치이며,
-   실제 보호는 현장 데이터가 각 기기에만 있고 저장소에 올라가지 않는다는 데서 나온다. */
-const AUTH_KEY="gridsite.auth", GH_TOKEN_KEY="gridsite.ghToken", MIN_PW=4;
-const ACCESS_API="https://api.github.com/repos/woosups-lab/power-map/contents/access.json";
-let access=null, started=false, gateMode="login";
-const ssGet=k=>{ try{ return sessionStorage.getItem(k); }catch(e){ return null; } };
-const ssSet=(k,v)=>{ try{ sessionStorage.setItem(k,v); }catch(e){} };
-const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
-async function pwHash(pw,saltHex,iter){
-  const salt=Uint8Array.from(saltHex.match(/../g),h=>parseInt(h,16));
-  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveBits"]);
-  return hex(await crypto.subtle.deriveBits({name:"PBKDF2",hash:"SHA-256",salt,iterations:iter},key,256));
+/* ---------- 서버(Supabase): 현장 문서와 첨부 ----------
+   현장은 이 기기에도 저장본(CACHE_KEY)을 두어 오프라인에서 볼 수 있다.
+   마지막으로 서버와 맞춘 상태(SYNCED_KEY)와 비교해 바뀐 현장만 올린다. 동시에 고치면 나중 것이 남는다. */
+const CACHE_KEY="gridsite.sites.cache", SYNCED_KEY="gridsite.sites.synced", BUCKET="attachments", MAX_FILE=50e6;
+let sb=null, synced=new Map(), pushTimer=null, pushing=false;
+function initServer(){
+  if(cfg?.supabaseUrl && cfg?.supabaseKey && window.supabase)
+    sb=supabase.createClient(cfg.supabaseUrl,cfg.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,storageKey:"gridsite.auth.session"}});
+  sb?.auth.onAuthStateChange?.(ev=>{ if(ev==="SIGNED_OUT") loggedOut(); });
 }
-async function makeEntry(pw){
-  const salt=hex(crypto.getRandomValues(new Uint8Array(16)));
-  return {salt,hash:await pwHash(pw,salt,access.iter)};
+const siteJson = s => JSON.stringify(s);
+const pendingIds = () => {
+  const cur=new Map(sites.filter(s=>!s.example).map(s=>[s.id,siteJson(s)]));
+  return {cur, up:[...cur].filter(([id,j])=>synced.get(id)!==j), del:[...synced.keys()].filter(id=>!cur.has(id))};
+};
+const hasPending = () => { const p=pendingIds(); return p.up.length+p.del.length>0; };
+function setSynced(map){ synced=map; lsSet(SYNCED_KEY,JSON.stringify([...map])); }
+function setSync(msg,err){ setStatus("#syncNote",msg,err); }
+function loadCache(){
+  let c=[], s=[];
+  try{ c=JSON.parse(lsGet(CACHE_KEY)||"[]"); s=JSON.parse(lsGet(SYNCED_KEY)||"[]"); }catch(e){}
+  sites=(Array.isArray(c)?c:[]).map(normSite); synced=new Map(Array.isArray(s)?s:[]);
 }
-async function matchRole(pw){
-  for(const r of ["admin","viewer"]) if(await pwHash(pw,access[r].salt,access.iter)===access[r].hash) return r;
-  return null;
-}
-const authMark=r=>access[r].hash.slice(0,16);   // 비밀번호가 바뀌면 다시 입력하도록 함
-function rememberRole(r){
-  const v=JSON.stringify({role:r,mark:authMark(r)});
-  if(r==="admin") ssSet(AUTH_KEY,v); else lsSet(AUTH_KEY,v);   // 관리자는 창을 닫으면 해제
-}
-function savedRole(){
-  for(const raw of [ssGet(AUTH_KEY),lsGet(AUTH_KEY)]){
-    try{ const a=JSON.parse(raw); if(a && access[a.role] && a.mark===authMark(a.role)) return a.role; }catch(e){}
+async function pullSites(){
+  if(!sb || isOffline() || pushing || (isAdmin() && hasPending())) return false;
+  const {data,error}=await sb.from("sites").select("id,doc");
+  if(error){
+    if(/permission denied|JWT/i.test(error.message)) return loggedOut(), false;   // 비밀번호가 바뀌어 로그인이 풀린 경우
+    setSync("서버에서 현장을 받지 못했습니다: "+error.message,true); return false;
   }
-  return null;
+  sites=data.map(r=>normSite({...r.doc,id:r.id}));
+  setSynced(new Map(sites.map(s=>[s.id,siteJson(s)])));
+  lsSet(CACHE_KEY,JSON.stringify(sites)); renderMarkers(); renderList();
+  if(curDetail && !document.querySelector('[data-view="detail"]').hidden) renderDetail();
+  setSync(""); checkLegacy();
+  return true;
+}
+function queuePush(){ if(!sb || !isAdmin()) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushSites,400); }
+async function pushSites(){
+  if(!sb || !isAdmin() || pushing) return;
+  if(isOffline()) return setSync("오프라인입니다. 바뀐 내용은 인터넷에 연결되면 서버에 저장됩니다.",true);
+  const {cur,up,del}=pendingIds(); if(!up.length && !del.length) return;
+  pushing=true; setSync("서버에 저장 중…");
+  try{
+    if(up.length){ const {error}=await sb.from("sites").upsert(up.map(([id,j])=>({id,doc:JSON.parse(j)}))); if(error) throw error; }
+    if(del.length){ const {error}=await sb.from("sites").delete().in("id",del); if(error) throw error; }
+    setSynced(cur); setSync("");
+  }catch(e){ setSync("서버에 저장하지 못했습니다: "+(e.message||e)+". 다시 연결되면 저장합니다.",true); }
+  pushing=false;
+  if(hasPending() && !isOffline()) queuePush();
+}
+addEventListener("online",()=>{ if(!started) return; if(isAdmin() && hasPending()) pushSites(); else pullSites(); });
+document.addEventListener("visibilitychange",()=>{ if(started && !document.hidden) pullSites(); });
+
+/* 첨부: 이 기기 저장본(IndexedDB)이 먼저, 없으면 서버에서 받아 저장해 둠 */
+const filePath = (siteId,fileId) => `${siteId}/${fileId}`;
+async function uploadAttachment(siteId,fileId,blob){
+  if(!sb) return;
+  const {error}=await sb.storage.from(BUCKET).upload(filePath(siteId,fileId),blob,{upsert:true,contentType:blob.type||"application/octet-stream"});
+  if(error) throw new Error("서버에 올리지 못했습니다: "+error.message);
+}
+async function getAttachment(site,meta){
+  const local=await IDB.getFile(meta.id).catch(()=>null);
+  if(local || !sb || isOffline()) return local;
+  const {data,error}=await sb.storage.from(BUCKET).download(filePath(site.id,meta.id));
+  if(error) return null;
+  await IDB.putFile(meta.id,data).catch(()=>{});
+  return data;
+}
+async function removeAttachments(siteId,ids){
+  ids.forEach(id=>IDB.delFile(id));
+  if(sb && ids.length) await sb.storage.from(BUCKET).remove(ids.map(id=>filePath(siteId,id))).catch(()=>{});
+}
+/* 큰 사진은 긴 변 2000px JPEG로 줄여 서버 용량을 아낌 */
+async function shrinkImage(file){
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size<1.5e6) return file;
+  try{
+    const img=await createImageBitmap(file), k=Math.min(1,2000/Math.max(img.width,img.height));
+    const c=document.createElement("canvas"); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",.85));
+    return blob && blob.size<file.size ? new File([blob],file.name.replace(/\.\w+$/,"")+".jpg",{type:"image/jpeg"}) : file;
+  }catch(e){ return file; }
+}
+
+/* 서버 연결 전 이 기기에만 저장했던 현장을 관리자가 서버로 올림 */
+function legacySites(){
+  let old=[]; try{ old=JSON.parse(lsGet(STORE)||"[]"); }catch(e){}
+  const ids=new Set(sites.map(s=>s.id));
+  return (Array.isArray(old)?old:[]).filter(s=>!s.example && !ids.has(s.id)).map(normSite);
+}
+function checkLegacy(){
+  const n=sb && isAdmin() ? legacySites().length : 0;
+  $("#legacyBox").hidden=!n;
+  if(n) $("#legacyMsg").textContent=`이 기기에만 저장된 현장이 ${n}곳 있습니다. 서버로 올리면 모든 기기에서 보입니다.`;
+}
+$("#btnLegacy").onclick=async()=>{
+  const list=legacySites(); if(!list.length || !isAdmin()) return;
+  $("#btnLegacy").disabled=true;
+  try{
+    for(const s of list) for(const m of s.files){
+      setStatus("#legacyMsg",`첨부 올리는 중… ${s.name}`);
+      const b=await IDB.getFile(m.id).catch(()=>null); if(b) await uploadAttachment(s.id,m.id,b);
+    }
+    sites.push(...list); refreshAll(); await pushSites();
+    if(hasPending()) throw new Error("현장을 서버에 저장하지 못했습니다");
+    lsSet(STORE+".migrated",lsGet(STORE)||""); try{ localStorage.removeItem(STORE); }catch(e){}
+    setStatus("#legacyMsg",`${list.length}곳을 서버로 올렸습니다.`);
+    setTimeout(checkLegacy,2500);
+  }catch(e){ setStatus("#legacyMsg","올리지 못했습니다: "+e.message,true); }
+  $("#btnLegacy").disabled=false;
+};
+
+/* ---------- 입장: Supabase 로그인 ----------
+   이용자는 공용 계정(cfg.viewerEmail)에 비밀번호만 넣고, 관리자는 자기 이메일로 들어온다.
+   권한은 서버의 members 표와 RLS 규칙이 정하므로 화면을 우회해도 데이터를 바꿀 수 없다. */
+const ROLE_KEY="gridsite.role", ADMIN_EMAIL_KEY="gridsite.adminEmail", MIN_PW=6;
+let started=false, gateMode="login";
+async function fetchRole(){
+  const {data:{user}}=await sb.auth.getUser(); if(!user) return null;
+  const {data,error}=await sb.from("members").select("role").eq("user_id",user.id).maybeSingle();
+  if(error) throw error;
+  return data?.role||null;
 }
 function applyRole(r){
   role=r; document.body.dataset.role=r;
   $("#btnAdmin").textContent=r==="admin"?"관리자 종료":"관리자 모드";
   $("#roleNote").textContent=r==="admin"?"관리자로 사용 중입니다. 모든 정보를 수정할 수 있습니다.":"이용자로 사용 중입니다. 보기만 가능합니다.";
-  $("#restoreNote").textContent=r==="admin"?" 같은 현장은 백업 내용으로 바뀝니다.":" 이 기기의 현장 데이터는 백업 내용으로 모두 바뀝니다.";
   if(!started) return;
-  renderMarkers();
+  renderMarkers(); checkLegacy();
   const cur=document.querySelector(".tabs button[aria-selected=true]")?.dataset.tab;
   if(!document.querySelector('[data-view="detail"]').hidden) renderDetail();
   else if(r!=="admin" && cur==="add") showTab("sites");
 }
-function showGate(mode){
+function showGate(mode,cancellable){
   gateMode=mode; $("#gate").hidden=false; $("#gatePw").value=""; setStatus("#gateStatus","");
-  $("#gateMsg").textContent=mode==="admin"?"관리자 비밀번호를 입력하세요.":"비밀번호를 입력하세요.";
-  $("#gateCancel").hidden=mode!=="admin"; $("#gatePw").focus();
+  $("#gateEmailRow").hidden=mode!=="admin";
+  $("#gateEmail").value=lsGet(ADMIN_EMAIL_KEY)||"";
+  $("#gateMsg").textContent=mode==="admin"?"관리자 이메일과 비밀번호를 입력하세요.":"비밀번호를 입력하세요.";
+  $("#gateSwitch").textContent=mode==="admin"?"이용자로 들어가기":"관리자로 로그인";
+  $("#gateCancel").hidden=!cancellable;
+  (mode==="admin" && !$("#gateEmail").value ? $("#gateEmail") : $("#gatePw")).focus();
+}
+function loggedOut(){
+  if(!started || !$("#gate").hidden) return;
+  lsSet(ROLE_KEY,""); applyRole("viewer"); showGate("login",false);
+  setStatus("#gateStatus","로그인이 끝났습니다. 비밀번호가 바뀌었다면 새 비밀번호를 입력하세요.");
 }
 function enter(r){
-  applyRole(r); $("#gate").hidden=true;
-  if(!started){ started=true; startApp(); }
+  lsSet(ROLE_KEY,r); applyRole(r); $("#gate").hidden=true;
+  if(!started){ started=true; startApp(); } else pullSites();
 }
 $("#gateForm").addEventListener("submit",async e=>{
   e.preventDefault();
-  if(!access) return setStatus("#gateStatus","접속 정보를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
+  if(!sb) return setStatus("#gateStatus","서버 설정을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
+  if(isOffline()) return setStatus("#gateStatus","로그인에는 인터넷이 필요합니다.",true);
+  const email=gateMode==="admin"?$("#gateEmail").value.trim():cfg.viewerEmail, password=$("#gatePw").value;
+  if(!email) return setStatus("#gateStatus","이메일을 입력하세요.",true);
   setStatus("#gateStatus","확인 중…");
-  const r=await matchRole($("#gatePw").value);
-  if(!r || (gateMode==="admin" && r!=="admin")) return setStatus("#gateStatus","비밀번호가 맞지 않습니다.",true);
-  rememberRole(r); enter(r);
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  if(error) return setStatus("#gateStatus",/invalid/i.test(error.message)?"비밀번호가 맞지 않습니다.":"로그인하지 못했습니다: "+error.message,true);
+  const r=await fetchRole().catch(()=>null);
+  if(!r || (gateMode==="admin" && r!=="admin")){
+    await sb.auth.signOut();
+    return setStatus("#gateStatus",gateMode==="admin"?"관리자 계정이 아닙니다.":"이 계정에는 사용 권한이 없습니다.",true);
+  }
+  if(gateMode==="admin") lsSet(ADMIN_EMAIL_KEY,email);
+  enter(r);
 });
+$("#gateSwitch").onclick=()=>showGate(gateMode==="admin"?"login":"admin",!$("#gateCancel").hidden);
 $("#gateCancel").onclick=()=>{ $("#gate").hidden=true; };
-$("#btnAdmin").onclick=e=>{
+$("#btnAdmin").onclick=async e=>{
   e.stopPropagation();
-  if(isAdmin()){ ssSet(AUTH_KEY,""); lsSet(AUTH_KEY,JSON.stringify({role:"viewer",mark:authMark("viewer")})); applyRole("viewer"); }
-  else showGate("admin");
+  if(!isAdmin()) return showGate("admin",true);
+  if(hasPending()) await pushSites();
+  await sb.auth.signOut(); lsSet(ROLE_KEY,""); applyRole("viewer"); showGate("login",false);   // 관리자 종료 후 이용자 비밀번호로 다시 들어옴
 };
-$("#btnLogout").onclick=()=>{ ssSet(AUTH_KEY,""); lsSet(AUTH_KEY,""); location.reload(); };
+$("#btnLogout").onclick=async()=>{ if(isAdmin() && hasPending()) await pushSites(); await sb?.auth.signOut(); lsSet(ROLE_KEY,""); location.reload(); };
 async function gate(){
-  try{ const a=await fetchJson("access.json"); if(a.admin?.hash && a.viewer?.hash) access=a; }catch(e){}
-  cfg=await fetchJson("config.json").catch(()=>({})); applyParcel();
-  if(!access) return setStatus("#gateStatus","접속 정보를 받지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
-  const r=savedRole();
-  if(r) enter(r); else showGate("login");
+  cfg=await fetchJson("config.json").catch(()=>({})); applyParcel(); initServer();
+  if(!sb) return setStatus("#gateStatus","서버 설정을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.",true);
+  const {data:{session}}=await sb.auth.getSession();
+  if(session){
+    let r=lsGet(ROLE_KEY);
+    if(!isOffline()) r=await fetchRole().catch(()=>r);
+    if(r) return enter(r);
+  }
+  showGate("login",false);
 }
 
-/* 비밀번호 변경: access.json을 새로 만들어 저장소에 커밋 (토큰이 없으면 파일로 내려받기) */
-$("#ghToken").value=lsGet(GH_TOKEN_KEY)||"";
-$("#btnTokenSave").onclick=()=>{ lsSet(GH_TOKEN_KEY,$("#ghToken").value.trim()); setStatus("#pwStatus","토큰을 이 기기에 저장했습니다."); };
-async function publishAccess(json,token){
-  const headers={Authorization:"Bearer "+token,Accept:"application/vnd.github+json"};
-  const cur=await fetch(ACCESS_API,{headers,cache:"no-store"});
-  if(!cur.ok) throw new Error("토큰을 확인해 주세요 (GitHub 응답 "+cur.status+")");
-  const {sha}=await cur.json();
-  const put=await fetch(ACCESS_API,{method:"PUT",headers,body:JSON.stringify({message:"비밀번호 변경",content:btoa(json),sha})});
-  if(!put.ok) throw new Error("GitHub에 저장하지 못했습니다 (응답 "+put.status+")");
-}
+/* 비밀번호 변경: 이용자 비밀번호는 서버 함수로, 관리자 비밀번호는 본인 계정에서 바꿈 */
 $("#btnPwApply").onclick=async()=>{
   if(!isAdmin()) return;
   const v=$("#pwViewer").value, a=$("#pwAdmin").value;
   if(!v && !a) return setStatus("#pwStatus","바꿀 비밀번호를 입력하세요.",true);
   if([v,a].some(p=>p && p.length<MIN_PW)) return setStatus("#pwStatus",`비밀번호는 ${MIN_PW}자 이상으로 해 주세요.`,true);
+  if(isOffline()) return setStatus("#pwStatus","비밀번호 변경에는 인터넷이 필요합니다.",true);
   setStatus("#pwStatus","적용 중…");
-  const next={...access};
-  if(v) next.viewer=await makeEntry(v);
-  if(a) next.admin=await makeEntry(a);
-  const json=JSON.stringify(next,null,2)+"\n", token=lsGet(GH_TOKEN_KEY);
   try{
-    if(token){ await publishAccess(json,token); setStatus("#pwStatus","변경했습니다. 약 1분 뒤 사이트에 반영되고, 이용자는 새 비밀번호로 다시 들어와야 합니다."); }
-    else{ download("access.json",json,"application/json"); setStatus("#pwStatus","access.json을 내려받았습니다. GitHub 저장소의 같은 파일을 이것으로 교체해야 적용됩니다."); }
-    access=next; $("#pwViewer").value=""; $("#pwAdmin").value=""; rememberRole("admin");
-  }catch(err){ setStatus("#pwStatus",err.message,true); }
+    if(v){ const {error}=await sb.rpc("set_viewer_password",{new_password:v}); if(error) throw error; }
+    if(a){ const {error}=await sb.auth.updateUser({password:a}); if(error) throw error; }
+    $("#pwViewer").value=""; $("#pwAdmin").value="";
+    setStatus("#pwStatus",`변경했습니다.${v?" 이용자는 새 비밀번호로 다시 들어와야 합니다.":""}`);
+  }catch(err){ setStatus("#pwStatus","변경하지 못했습니다: "+err.message,true); }
 };
 
 /* ---------- 오프라인 지도 ----------
@@ -1697,29 +1793,26 @@ $("#baseSel").onchange=()=>{ tileErrors=0; setBase($("#baseSel").value); lsSet("
 $("#kakaoKey").value=lsGet("gridsite.kakaoKey")||"";
 $("#btnKey").onclick=()=>{ lsSet("gridsite.kakaoKey",$("#kakaoKey").value.trim()); kakaoReady=null; $("#btnKey").textContent="저장됨"; setTimeout(()=>$("#btnKey").textContent="키 저장",1500); };
 let wipeArmed=false;
-$("#btnWipe").onclick=()=>{
-  if(!wipeArmed){ wipeArmed=true; setStatus("#wipeStatus","한 번 더 누르면 이 기기의 현장이 모두 지워집니다. 먼저 JSON으로 내보내 두세요.",true); setTimeout(()=>wipeArmed=false,4000); return; }
-  sites=[]; IDB.clearFiles(); refreshAll(); wipeArmed=false; setStatus("#wipeStatus","지웠습니다.");
+$("#btnWipe").onclick=async()=>{
+  if(!wipeArmed){ wipeArmed=true; setStatus("#wipeStatus",hasPending()?"서버에 아직 저장되지 않은 변경이 있습니다. 한 번 더 누르면 그 변경까지 지워집니다.":"한 번 더 누르면 이 기기의 저장본과 받아 둔 첨부가 지워집니다. 서버 데이터는 그대로입니다.",true); setTimeout(()=>wipeArmed=false,4000); return; }
+  wipeArmed=false; await IDB.clearFiles(); sites=[]; setSynced(new Map()); lsSet(CACHE_KEY,"[]"); renderMarkers(); renderList();
+  setStatus("#wipeStatus",await pullSites()?"지우고 서버에서 다시 받았습니다.":"지웠습니다. 인터넷에 연결되면 서버에서 다시 받습니다.");
 };
 
 /* ---------- 시작 ---------- */
 window.App={setEnd,near,edit,setStage,detail,pinToSite};
 async function startApp(){
-  let saved=null; try{ saved=JSON.parse(lsGet(STORE)||"null"); }catch(e){}
-  if(Array.isArray(saved)) sites=saved.map(normSite);
-  else{
-    sites=[
-      {id:"ex1",name:"(예시) 충주 태양광+ESS",category:"태양광+ESS",status:"사업개발 중",capacity:"PV 1MW / ESS 2MWh",address:"충청북도 충주시",lat:36.991,lng:127.926,memo:"예시 데이터입니다. 지워도 됩니다.",example:true},
-      {id:"ex2",name:"(예시) 남동공단 데이터센터",category:"데이터센터",status:"EPC 영업 중",capacity:"수전 154kV",address:"인천 남동구 남동국가산업단지",lat:37.402,lng:126.700,memo:"예시 데이터입니다.",example:true}
-    ].map(normSite);
-    save();
-  }
+  loadCache();
   renderMarkers(); renderList(); clearForm();
   if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.3),{maxZoom:11});
   if(isMobile()) $("#panel").classList.add("collapsed");
   renderRegions();
   if(matchMedia("(display-mode: standalone)").matches) navigator.storage?.persist?.();
   await IDB.open(); loadGrid();
+  const first=!sites.length;
+  if(isAdmin() && hasPending()) await pushSites();
+  if(await pullSites() && first && sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.3),{maxZoom:11});
+  checkLegacy();
 }
 gate();
 </script>

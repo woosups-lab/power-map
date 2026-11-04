@@ -12,3 +12,4 @@ sites*.json
 
 node_modules/
 .claude/
+config.local.json

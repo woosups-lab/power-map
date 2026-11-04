@@ -9,7 +9,7 @@ const RUNTIME_MAX = 4000;
 const NET_TIMEOUT = 4000;
 
 const ASSETS = [
-  "./", "manifest.webmanifest", "access.json", "config.json",
+  "./", "manifest.webmanifest", "config.json", "vendor/supabase.js",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png",
   "vendor/jszip.min.js", "vendor/leaflet-maplibre-gl.js",
   "vendor/maplibre-gl-csp.js", "vendor/maplibre-gl-csp-worker.js", "vendor/maplibre-gl.css",
@@ -85,7 +85,7 @@ self.addEventListener("fetch", e => {
   if (url.origin === location.origin) {
     if (/\/grid(-meta)?\.json$/.test(url.pathname)) return;   // 저장은 앱의 IndexedDB가 맡음
     if (req.mode === "navigate") return e.respondWith(networkFirst(req, SHELL, "./"));
-    const live = url.pathname.match(/\/(access|config)\.json$/);   // 비밀번호·키 변경이 바로 반영되도록
+    const live = url.pathname.match(/\/(config)\.json$/);   // 키 변경이 바로 반영되도록
     if (live) return e.respondWith(networkFirst(req, SHELL, live[1] + ".json"));
     return e.respondWith(cacheFirst(req, SHELL));
   }

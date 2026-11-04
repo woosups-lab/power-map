@@ -13,7 +13,9 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^[/\\]+/, "");
   try {
-    const body = await readFile(join(ROOT, path === "" || path === "." ? "index.html" : path));
+    /* 개발할 때는 저장소에 올리지 않는 config.local.json을 config.json 대신 씀 */
+    const file = path === "" || path === "." ? "index.html" : path === "config.json" ? await readFile(join(ROOT, "config.local.json")).then(() => "config.local.json", () => path) : path;
+    const body = await readFile(join(ROOT, file));
     res.writeHead(200, { "Content-Type": TYPES[extname(path) || ".html"] || "application/octet-stream", "Cache-Control": "no-cache" });
     res.end(body);
   } catch {
