@@ -78,6 +78,15 @@ progress{width:100%;height:8px;accent-color:var(--accent)}
 .region:last-child{border-bottom:0}
 .region .acts{display:flex;gap:4px}
 body[data-role="viewer"] .admin-only{display:none!important}
+.lrow{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line);background:var(--panel)}
+.lrow:last-child{border-bottom:0}
+.lrow input[type=text]{flex:1;min-width:0;padding:6px 8px}
+.lrow input[type=color]{width:34px;height:32px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;flex:0 0 auto}
+.lrow .n{font-size:11px;color:var(--muted);white-space:nowrap;min-width:28px;text-align:right}
+.lrow .btn.small{padding:4px 7px}
+.lrow .btn:disabled{opacity:.35;cursor:default}
+.lnew{display:flex;gap:8px}
+.lnew input{flex:1;min-width:0}
 #gate{position:fixed;inset:0;z-index:3000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 #gate form{width:100%;max-width:340px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:12px}
 #gate h1{font-size:18px;margin:0}
@@ -345,6 +354,15 @@ input[type=password],input[type=date]{width:100%;padding:8px 10px;border:1px sol
       <button class="btn primary" id="btnPwApply">비밀번호 변경 적용</button>
       <p class="status" id="pwStatus"></p>
       <p class="hint">6자 이상이어야 합니다. 바뀐 비밀번호는 바로 적용됩니다.</p>
+      <h2>구분 관리</h2>
+      <div class="list" id="catEdit"></div>
+      <div class="lnew"><input type="text" id="catNew" placeholder="새 구분 이름" aria-label="새 구분 이름"><button class="btn" id="catAdd">추가</button></div>
+      <h2>진행 단계 관리</h2>
+      <div class="list" id="stEdit"></div>
+      <div class="lnew"><input type="text" id="stNew" placeholder="새 진행 단계 이름" aria-label="새 진행 단계 이름"><button class="btn" id="stAdd">추가</button></div>
+      <div class="row"><button class="btn primary" id="listSave">구분·단계 저장</button><button class="btn" id="listReset">되돌리기</button></div>
+      <p class="status" id="listStatus"></p>
+      <p class="hint">이름을 고치면 그 값을 쓰던 현장도 함께 바뀝니다. 진행 단계는 위에서부터 순서대로 보입니다. 현장이 쓰고 있는 항목은 지울 수 없으니 먼저 현장의 값을 바꾸세요. 저장하면 모든 기기에 적용됩니다.</p>
     </div>
     <h2>앱으로 설치</h2>
     <button class="btn" id="btnInstall" hidden>이 기기에 설치</button>
@@ -378,15 +396,26 @@ if(window.maplibregl) maplibregl.setWorkerUrl("vendor/maplibre-gl-csp-worker.js"
 <script>
 "use strict";
 /* ---------- 기본 상수 ---------- */
-const CATS = {"사무소":"#5d6b7a","태양광":"#e8a400","ESS":"#0b6bcb","태양광+ESS":"#2f9e44","데이터센터":"#6741d9","사설변전소":"#c2255c"};
+/* 구분(색 포함)과 진행 단계 목록. 관리자가 설정 탭에서 바꾸며 서버 settings 표(key "lists")에 저장된다.
+   서버에 아직 없으면 아래 기본값을 쓴다. */
+const DEFAULT_LISTS = {
+  cats:[{name:"사무소",color:"#5d6b7a"},{name:"태양광",color:"#e8a400"},{name:"ESS",color:"#0b6bcb"},{name:"태양광+ESS",color:"#2f9e44"},
+    {name:"데이터센터",color:"#6741d9"},{name:"사설변전소",color:"#c2255c"},{name:"한전변전소",color:"#1098ad"}],
+  statuses:["사업참여 검토 중","사업개발 중","EPC 영업 중","EPC 공사 중","운영 중"]};
+let CATS = {}, STATUSES = [];
 const UNCAT = "미분류";   // 예전 구분 중 새 구분에 대응이 없는 값 (풍력, 기타)
-const catColor = c => CATS[c] || "#8a96a3";
-const STATUSES = ["사업참여 검토 중","사업개발 중","EPC 영업 중","EPC 공사 중","운영 중"];
+const OTHER_COLOR = "#8a96a3";
+const catColor = c => CATS[c] || OTHER_COLOR;
 const OLD_CAT = {"수전·변전":"사설변전소"};
 const OLD_STATUS = {"영업":"EPC 영업 중","설계":"사업개발 중","시공":"EPC 공사 중","준공·운영":"운영 중","보류":"사업참여 검토 중"};
+/* 가져오기(CSV·예전 기기 저장본)는 목록에 없는 값을 미분류/첫 단계로 바꾼다 */
 const normCat = c => CATS[c] ? c : (OLD_CAT[c] || UNCAT);
 const normStatus = s => STATUSES.includes(s) ? s : (OLD_STATUS[s] || STATUSES[0]);
-const normSite = s => ({...s, category:normCat(s.category), status:normStatus(s.status), logs:s.logs||[], files:s.files||[]});
+/* 서버·저장본의 현장은 목록에 없는 값도 그대로 둔다. 목록이 늦게 받아진 기기가 값을 덮어쓰지 않게 하기 위함 */
+const keepCat = c => OLD_CAT[c] || c || UNCAT;
+const keepStatus = s => OLD_STATUS[s] || s || STATUSES[0];
+const normSite = s => ({...s, category:keepCat(s.category), status:keepStatus(s.status), logs:s.logs||[], files:s.files||[]});
+const strictSite = s => ({...normSite(s), category:normCat(s.category), status:normStatus(s.status)});
 const ROUTE_COLORS = ["#0b6bcb","#e8590c","#2f9e44"];
 const STORE = "gridsite.sites.v1";   // 서버 연결 전 이 기기에만 저장하던 현장 (올리기 안내에 사용)
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
@@ -508,7 +537,7 @@ function siteIcon(s){
   return L.divIcon({className:"", html:`<div class="site-pin" style="background:${c}"></div>`, iconSize:[18,18], iconAnchor:[9,18], popupAnchor:[0,-16]});
 }
 function sitePopup(s){
-  const stage=STATUSES.map(v=>`<option${v===s.status?" selected":""}>${esc(v)}</option>`).join("");
+  const stage=(STATUSES.includes(s.status)?STATUSES:[...STATUSES,s.status]).map(v=>`<option${v===s.status?" selected":""}>${esc(v)}</option>`).join("");
   return `<b>${esc(s.name)}</b><br><span style="color:#5d6b7a">${esc(s.category)}${s.capacity? " · "+esc(s.capacity):""}</span>
    <label class="pop-stage">진행 단계<select onchange="App.setStage('${s.id}',this.value)"${isAdmin()?"":" disabled"}>${stage}</select></label>
    ${s.address? `<br>${esc(s.address)}`:""}${s.memo? `<br><i>${esc(s.memo)}</i>`:""}
@@ -533,16 +562,36 @@ function renderMarkers(){
 function fillSelect(sel, items, first){
   sel.innerHTML = (first? `<option value="">${first}</option>`:"") + items.map(v=>`<option>${esc(v)}</option>`).join("");
 }
-fillSelect($("#eCat"), Object.keys(CATS));
-fillSelect($("#eStatus"), STATUSES);
-fillSelect($("#dCat"), Object.keys(CATS));
-fillSelect($("#dStatus"), STATUSES);
+/* 목록에서 빠진 값을 가진 현장도 그 값을 고른 채로 보여 주도록 임시 항목을 붙임 */
+function setSelect(sel, val){
+  sel.querySelectorAll("option[data-extra]").forEach(o=>o.remove());
+  if(val && ![...sel.options].some(o=>o.value===val)){
+    const o=document.createElement("option"); o.textContent=val; o.dataset.extra="1"; sel.appendChild(o);
+  }
+  sel.value=val||"";
+}
+/* 목록에 없지만 현장이 쓰고 있는 값 (예전 구분, 지운 단계 등) */
+const extraValues = (f,list) => [...new Set(sites.map(s=>siteField(s,f)))].filter(v=>v && !list.includes(v)).sort((a,b)=>a.localeCompare(b,"ko"));
+function refillSelects(){
+  for(const [sel,items] of [["#eCat",Object.keys(CATS)],["#dCat",Object.keys(CATS)],["#eStatus",STATUSES],["#dStatus",STATUSES]]){
+    const el=$(sel), v=el.value; fillSelect(el,items); setSelect(el,v||items[0]);
+  }
+}
+function applyLists(l){
+  const ok = l && Array.isArray(l.cats) && Array.isArray(l.statuses) && l.cats.length && l.statuses.length;
+  if(!ok) l=DEFAULT_LISTS;
+  CATS=Object.fromEntries(l.cats.filter(c=>c&&c.name).map(c=>[String(c.name),/^#[0-9a-f]{6}$/i.test(c.color)?c.color:OTHER_COLOR]));
+  STATUSES=[...new Set(l.statuses.filter(Boolean).map(String))];
+  refillSelects();
+}
+const LISTS_KEY="gridsite.lists";
+try{ applyLists(JSON.parse(lsGet(LISTS_KEY)||"null")); }catch(e){ applyLists(null); }
 
 /* 구분·단계 필터: 뺀 항목을 저장하므로 새 구분이 생겨도 기본으로 보임. 목록과 지도에 함께 적용 */
 const FILTER_KEY="gridsite.siteFilter";
 let filterOff={cat:[],st:[]}, ddOpen=null;
 try{ filterOff={...filterOff,...JSON.parse(lsGet(FILTER_KEY)||"{}")}; }catch(e){}
-const filterOptions = f => f==="st" ? STATUSES : [...Object.keys(CATS),...(sites.some(s=>s.category===UNCAT)?[UNCAT]:[])];
+const filterOptions = f => { const list=f==="st"?STATUSES:Object.keys(CATS); return [...list,...extraValues(f,list)]; };
 const siteField = (s,f) => f==="st" ? s.status : s.category;
 function matchSite(s,skip){
   const q=$("#q").value.trim().toLowerCase();
@@ -619,11 +668,11 @@ function refreshAll(){ save(); renderMarkers(); renderList(); }
 /* ---------- 편집 ---------- */
 function clearForm(){
   ["#eId","#eName","#eCap","#eAddr","#eLink","#eLat","#eLng","#eMemo"].forEach(s=>$(s).value="");
-  $("#eCat").value="태양광"; $("#eStatus").value=STATUSES[0]; $("#btnDelete").hidden=true; setStatus("#editStatus","");
+  setSelect($("#eCat"),CATS["태양광"]?"태양광":Object.keys(CATS)[0]); setSelect($("#eStatus"),STATUSES[0]); $("#btnDelete").hidden=true; setStatus("#editStatus","");
 }
 function edit(id){
   const s = sites.find(x=>x.id===id); if(!s) return;
-  $("#eId").value=s.id; $("#eName").value=s.name; $("#eCat").value=s.category; $("#eStatus").value=s.status;
+  $("#eId").value=s.id; $("#eName").value=s.name; setSelect($("#eCat"),s.category); setSelect($("#eStatus"),s.status);
   $("#eCap").value=s.capacity||""; $("#eAddr").value=s.address||""; $("#eLat").value=s.lat; $("#eLng").value=s.lng;
   $("#eMemo").value=s.memo||""; $("#btnDelete").hidden=false; showTab("add");
   setStatus("#editStatus","‘"+s.name+"’ 수정 중");
@@ -1335,8 +1384,7 @@ function renderDetail(){
   $("#dName").textContent=s.name;
   $("#dInfo").textContent=[s.capacity,s.address].filter(Boolean).join(" · ");
   $("#dMemo").textContent=s.memo||"";
-  const cat=$("#dCat"); cat.value=s.category; if(!cat.value) cat.selectedIndex=-1;
-  $("#dStatus").value=s.status; cat.disabled=ro; $("#dStatus").disabled=ro;
+  const cat=$("#dCat"); setSelect(cat,s.category); setSelect($("#dStatus"),s.status); cat.disabled=ro; $("#dStatus").disabled=ro;
   $("#dLogDate").value=$("#dFileDate").value=today();
   const logs=s.logs.slice().sort((a,b)=>b.date.localeCompare(a.date));
   $("#dLogs").innerHTML=logs.length?logs.map(l=>ro?`
@@ -1445,6 +1493,7 @@ function loadCache(){
   sites=(Array.isArray(c)?c:[]).map(normSite); synced=new Map(Array.isArray(s)?s:[]);
 }
 async function pullSites(){
+  if(sb && !isOffline()) await pullLists().catch(()=>{});
   if(!sb || isOffline() || pushing || (isAdmin() && hasPending())) return false;
   const {data,error}=await sb.from("sites").select("id,doc");
   if(error){
@@ -1456,6 +1505,7 @@ async function pullSites(){
   lsSet(CACHE_KEY,JSON.stringify(sites)); renderMarkers(); renderList();
   if(curDetail && !document.querySelector('[data-view="detail"]').hidden) renderDetail();
   setSync(""); checkLegacy();
+  if(listDirty) renderListEditor(); else resetListDraft();
   return true;
 }
 function queuePush(){ if(!sb || !isAdmin()) return; clearTimeout(pushTimer); pushTimer=setTimeout(pushSites,400); }
@@ -1473,6 +1523,98 @@ async function pushSites(){
   if(hasPending() && !isOffline()) queuePush();
 }
 addEventListener("online",()=>{ if(!started) return; if(isAdmin() && hasPending()) pushSites(); else pullSites(); });
+
+/* ---------- 구분·진행 단계 목록: 서버 settings 표의 "lists" ---------- */
+const curLists = () => ({cats:Object.entries(CATS).map(([name,color])=>({name,color})), statuses:[...STATUSES]});
+async function pullLists(){
+  if(!sb || isOffline()) return;
+  const {data,error}=await sb.from("settings").select("value").eq("key","lists").maybeSingle();
+  if(error || !data?.value) return;   // 표가 아직 없거나 저장된 적 없으면 기본값·저장본 유지
+  const before=JSON.stringify(curLists());
+  applyLists(data.value); lsSet(LISTS_KEY,JSON.stringify(curLists()));
+  if(JSON.stringify(curLists())!==before){ renderMarkers(); renderList(); if(!listDirty) resetListDraft(); }
+}
+/* 편집 중인 목록. from은 원래 이름(새 항목은 null)이라 이름을 고치면 현장 값도 따라 바꿀 수 있음 */
+let listDraft=null, listDirty=false;
+function resetListDraft(){
+  listDraft={cats:Object.entries(CATS).map(([name,color])=>({name,color,from:name})),
+    statuses:STATUSES.map(name=>({name,from:name}))};
+  listDirty=false; renderListEditor(); setStatus("#listStatus","");
+}
+const useCount = (f,name) => name==null ? 0 : sites.filter(s=>(f==="cat"?s.category:s.status)===name).length;
+function renderListEditor(){
+  if(!listDraft) return;
+  for(const [box,f] of [["#catEdit","cat"],["#stEdit","st"]]){
+    const arr=f==="cat"?listDraft.cats:listDraft.statuses;
+    $(box).innerHTML=arr.map((it,i)=>`<div class="lrow" data-f="${f}" data-i="${i}">
+      ${f==="cat"?`<input type="color" data-k="color" value="${esc(it.color)}" aria-label="${esc(it.name)} 색">`:""}
+      <input type="text" data-k="name" value="${esc(it.name)}" aria-label="이름">
+      <span class="n">${useCount(f,it.from)}곳</span>
+      <button class="btn small" data-act="up"${i?"":" disabled"} aria-label="위로">▲</button>
+      <button class="btn small" data-act="down"${i<arr.length-1?"":" disabled"} aria-label="아래로">▼</button>
+      <button class="btn small" data-act="del" aria-label="삭제">삭제</button></div>`).join("");
+  }
+}
+for(const box of ["#catEdit","#stEdit"]){
+  $(box).addEventListener("input",e=>{
+    const r=e.target.closest(".lrow"), k=e.target.dataset.k; if(!r||!k) return;
+    (r.dataset.f==="cat"?listDraft.cats:listDraft.statuses)[+r.dataset.i][k]=e.target.value;
+    listDirty=true;
+  });
+  $(box).addEventListener("click",e=>{
+    const b=e.target.closest("button[data-act]"), r=e.target.closest(".lrow"); if(!b||!r) return;
+    const f=r.dataset.f, arr=f==="cat"?listDraft.cats:listDraft.statuses, i=+r.dataset.i;
+    if(b.dataset.act==="del"){
+      const n=useCount(f,arr[i].from);
+      if(n) return setStatus("#listStatus",`‘${arr[i].from}’을(를) 쓰는 현장이 ${n}곳 있어 지울 수 없습니다. 먼저 그 현장들의 ${f==="cat"?"구분":"진행 단계"}을 바꾸세요.`,true);
+      if(arr.length<=1) return setStatus("#listStatus","항목이 하나는 있어야 합니다.",true);
+      arr.splice(i,1);
+    } else {
+      const j=b.dataset.act==="up"?i-1:i+1; if(j<0||j>=arr.length) return;
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    listDirty=true; setStatus("#listStatus",""); renderListEditor();
+  });
+}
+function addListItem(f){
+  const inp=$(f==="cat"?"#catNew":"#stNew"), name=inp.value.trim(); if(!name) return;
+  const arr=f==="cat"?listDraft.cats:listDraft.statuses;
+  if(arr.some(x=>x.name.trim()===name)) return setStatus("#listStatus",`‘${name}’은(는) 이미 있습니다.`,true);
+  arr.push(f==="cat"?{name,color:"#868e96",from:null}:{name,from:null});
+  inp.value=""; listDirty=true; setStatus("#listStatus","추가했습니다. ‘구분·단계 저장’을 눌러야 적용됩니다."); renderListEditor();
+}
+$("#catAdd").onclick=()=>addListItem("cat");
+$("#stAdd").onclick=()=>addListItem("st");
+$("#catNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addListItem("cat"); } });
+$("#stNew").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addListItem("st"); } });
+$("#listReset").onclick=resetListDraft;
+$("#listSave").onclick=async()=>{
+  if(!isAdmin() || !listDraft) return;
+  for(const [arr,label] of [[listDraft.cats,"구분"],[listDraft.statuses,"진행 단계"]]){
+    const names=arr.map(x=>x.name.trim());
+    if(names.some(n=>!n)) return setStatus("#listStatus",`비어 있는 ${label} 이름이 있습니다.`,true);
+    const dup=names.find((n,i)=>names.indexOf(n)!==i);
+    if(dup) return setStatus("#listStatus",`${label} ‘${dup}’이(가) 두 번 있습니다.`,true);
+  }
+  if(!sb || isOffline()) return setStatus("#listStatus","구분·단계 저장에는 인터넷이 필요합니다.",true);
+  const value={cats:listDraft.cats.map(c=>({name:c.name.trim(),color:c.color})),statuses:listDraft.statuses.map(s=>s.name.trim())};
+  setStatus("#listStatus","저장 중…");
+  const {error}=await sb.from("settings").upsert({key:"lists",value});
+  if(error) return setStatus("#listStatus",/settings|relation|schema/i.test(error.message)
+    ? "서버에 설정 표가 없습니다. Supabase SQL Editor에서 supabase/schema.sql을 한 번 다시 실행해 주세요."
+    : "저장하지 못했습니다: "+error.message,true);
+  // 이름을 고친 항목은 그 값을 쓰던 현장도 함께 바꿈
+  const ren=f=>new Map((f==="cat"?listDraft.cats:listDraft.statuses).filter(x=>x.from!=null && x.from!==x.name.trim()).map(x=>[x.from,x.name.trim()]));
+  const rc=ren("cat"), rs=ren("st"); let changed=0;
+  for(const s of sites){
+    if(rc.has(s.category)){ s.category=rc.get(s.category); changed++; }
+    if(rs.has(s.status)){ s.status=rs.get(s.status); changed++; }
+  }
+  applyLists(value); lsSet(LISTS_KEY,JSON.stringify(curLists()));
+  if(changed) refreshAll(); else { renderMarkers(); renderList(); }
+  if(curDetail && !document.querySelector('[data-view="detail"]').hidden) renderDetail();
+  resetListDraft(); setStatus("#listStatus","저장했습니다."+(changed?` 이름이 바뀐 현장 값 ${changed}건도 고쳤습니다.`:""));
+};
 document.addEventListener("visibilitychange",()=>{ if(started && !document.hidden) pullSites(); });
 
 /* 첨부: 이 기기 저장본(IndexedDB)이 먼저, 없으면 서버에서 받아 저장해 둠 */
@@ -1510,7 +1652,7 @@ async function shrinkImage(file){
 function legacySites(){
   let old=[]; try{ old=JSON.parse(lsGet(STORE)||"[]"); }catch(e){}
   const ids=new Set(sites.map(s=>s.id));
-  return (Array.isArray(old)?old:[]).filter(s=>!s.example && !ids.has(s.id)).map(normSite);
+  return (Array.isArray(old)?old:[]).filter(s=>!s.example && !ids.has(s.id)).map(strictSite);
 }
 function checkLegacy(){
   const n=sb && isAdmin() ? legacySites().length : 0;
@@ -1819,7 +1961,7 @@ $("#btnWipe").onclick=async()=>{
 window.App={setEnd,near,edit,setStage,detail,pinToSite};
 async function startApp(){
   loadCache();
-  renderMarkers(); renderList(); clearForm();
+  renderMarkers(); renderList(); clearForm(); resetListDraft();
   if(sites.length) map.fitBounds(L.latLngBounds(sites.map(s=>[s.lat,s.lng])).pad(0.3),{maxZoom:11});
   if(isMobile()) $("#panel").classList.add("collapsed");
   renderRegions();

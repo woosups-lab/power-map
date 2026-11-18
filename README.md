@@ -31,6 +31,8 @@ Actions 탭의 Run workflow로 바로 실행할 수도 있습니다.
 회사 현장 정보는 이 저장소에 올리지 않습니다. 이 저장소는 공개 저장소입니다.
 
 - 현장·기록·첨부는 Supabase(서울)에 저장됩니다. 구조와 권한 규칙은 `supabase/schema.sql`입니다.
+- 구분(색 포함)과 진행 단계 목록은 관리자가 설정 탭의 ‘구분 관리·진행 단계 관리’에서 바꾸며 서버 `settings` 표에 저장됩니다.
+  이 표가 생기기 전 서버라면 `supabase/schema.sql`을 SQL Editor에서 한 번 다시 실행해야 합니다(여러 번 실행해도 안전).
 - 권한은 서버의 `members` 표가 정합니다. admin은 읽기·쓰기, viewer는 읽기만 할 수 있고, 등록되지 않은 계정은 아무것도 할 수 없습니다.
 - 이용자는 공용 계정 비밀번호로, 관리자는 자기 이메일로 로그인합니다. 신규 가입은 막혀 있습니다.
 - 서버 주소, 공개 키, 이용자 계정 주소는 저장소가 아니라 GitHub Secret(SUPABASE_URL, SUPABASE_KEY, VIEWER_EMAIL)에 두고 배포할 때 `config.json`에 넣습니다.
