@@ -44,6 +44,22 @@ revoke all on public.members, public.sites from anon;
 grant select on public.members to authenticated;
 grant select, insert, update, delete on public.sites to authenticated;
 
+-- 앱 설정: 구분(색 포함)·진행 단계 목록 등 (key "lists"). 회원은 읽고 관리자만 바꾼다.
+create table if not exists public.settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.settings enable row level security;
+drop policy if exists "설정 회원 읽기" on public.settings;
+drop policy if exists "설정 관리자 추가" on public.settings;
+drop policy if exists "설정 관리자 수정" on public.settings;
+create policy "설정 회원 읽기" on public.settings for select to authenticated using (public.my_role() is not null);
+create policy "설정 관리자 추가" on public.settings for insert to authenticated with check (public.my_role() = 'admin');
+create policy "설정 관리자 수정" on public.settings for update to authenticated using (public.my_role() = 'admin') with check (public.my_role() = 'admin');
+revoke all on public.settings from anon;
+grant select, insert, update on public.settings to authenticated;
+
 -- 첨부 파일: 비공개 버킷, 경로는 "현장ID/첨부ID", 파일 하나 최대 50MB
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('attachments', 'attachments', false, 52428800)
